@@ -1,5 +1,4 @@
 #/**
-# Copyright (c) 2010 Anup Patel.
 # Copyright (C) 2014 Institut de Recherche Technologique SystemX and OpenWide.
 # All rights reserved.
 #
@@ -17,47 +16,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
-# @file openconf.cfg
-# @author Anup Patel (anup@brainfault.org)
+# @file objects.mk
 # @author Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
-# @brief config file for library options
+# @brief list of the MTD driver objects
 # */
 
-menu "Library Options"
-
-
-config HAS_IOMEM
-	boolean
-	depends on !NO_IOMEM
-	select GENERIC_IO
-	default y
-
-config GENERIC_IO
-	boolean
-	default n
-
-config CONFIG_VSCREEN
-	tristate "Virtual screen capture library"
-	depends on CONFIG_INPUT
-	depends on CONFIG_FB
-	depends on CONFIG_VINPUT
-	depends on CONFIG_VDISPLAY
-	default n
-	help
-		Enable/Disable virtual screen capture library.
-
-source libs/netstack/openconf.cfg
-
-config CONFIG_VSTELNET
-	tristate "Vserial telnet library"
-	depends on CONFIG_NET_STACK
-	default n
-	help
-		Enable/Disable vstelnet library.
-
-source libs/vtemu/openconf.cfg
-
-source libs/vfs/openconf.cfg
-
-endmenu
-
+drivers-objs-$(CONFIG_MTD)+= mtd/mtdcore.o mtd/mtdconcat.o
+drivers-objs-$(CONFIG_MTD)+= mtd/mtdpart.o # mtd/mtdchar.o mtd/mtdsuper.o

@@ -28,5 +28,8 @@
 #define ENXIO			-(VMM_ENXIO)
 #define EPROTONOSUPPORT		-(VMM_EPROTONOSUPPORT)
 #define ESHUTDOWN		-(VMM_ESHUTDOWN)
+#define EROFS			-(VMM_EROFS)
+#define EUCLEAN			-(VMM_EUCLEAN)
+#define EBADMSG			-(VMM_BADMSG)
 
 #endif /* defined(_ASM_ERRNO_H) */
