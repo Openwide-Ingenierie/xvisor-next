@@ -65,4 +65,4 @@ static struct generic_board imx6_info = {
 	.final_init	= imx6_final_init,
 };
 
-GENERIC_BOARD_DECLARE(imx6, "arm,imx6q", &imx6_info);
+GENERIC_BOARD_DECLARE(imx6, "fsl,imx6q", &imx6_info);
