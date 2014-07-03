@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2014 Institut de Recherche Technologique SystemX and OpenWide.
+ * Originally from Jean-Christophe Dubois, and modified by
+ * Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
+ * to split device tree files between i.MX6-specific and Sabrelite-specific
+ * definitions.
+ */
 
 / {
 	#address-cells = <1>;
@@ -48,11 +55,6 @@
 			cpu-clear-addr = <0x10000034>;
 			cpu-release-addr = <0x10000030>;
 		};
-	};
-
-	memory {
-		device_type = "memory"; 
-		reg = <0x10000000 0x40000000>; /* 1 GB */
 	};
 
 	scu { /* Snoop Control Unit */
