@@ -3,7 +3,8 @@
  * Originally from Jean-Christophe Dubois, and modified by
  * Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
  * to split device tree files between i.MX6-specific and Sabrelite-specific
- * definitions.
+ * definitions, and add the Anatop definition.
+ * Inspired by the Linux Kernel 3.13.6 i.MX6 device tree file.
  */
 
 / {
@@ -87,6 +88,20 @@
 		ocram {
 			compatible = "mmio-sram";
 			reg = <0x00900000 0x40000>;
+		};
+
+		aips-bus@02000000 { /* AIPS1 */
+			compatible = "fsl,aips-bus", "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg = <0x02000000 0x100000>;
+			ranges;
+
+			anatop: anatop@020c8000 {
+				compatible = "fsl,imx6q-anatop", "syscon", "simple-bus";
+				reg = <0x020c8000 0x1000>;
+				interrupts = <49 54 127>;
+			};
 		};
 
 		SERIAL1: uart1 {
