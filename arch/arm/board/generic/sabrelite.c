@@ -32,12 +32,24 @@
 
 #include <generic_board.h>
 
+#include <imx-common.h>
+#include <imx-hardware.h>
+
 /*
  * Initialization functions
  */
+static void __init imx6q_init_irq(void)
+{
+	imx_gpc_init();
+}
 
 static int __init imx6_early_init(struct vmm_devtree_node *node)
 {
+	imx_print_silicon_rev(cpu_is_imx6dl() ? "i.MX6DL" : "i.MX6Q",
+			      imx_get_soc_revision());
+	imx_soc_device_init();
+	imx6q_init_irq();
+
 	return 0;
 }
 
