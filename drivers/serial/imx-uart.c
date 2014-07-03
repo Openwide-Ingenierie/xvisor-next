@@ -4,7 +4,8 @@
  *
  * Copyright (C) 2014 Institut de Recherche Technologique SystemX and OpenWide.
  * Modified by Jimmy Durand Wesolowski <jimmy.durand-wesolowski@openwide.fr>
- * to allow a full UART initialization without the need of a bootloader.
+ * to allow a full UART initialization without the need of a bootloader, and to
+ * correct and allow using the UART TX interruption, with a menuconfig option.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,8 +62,6 @@
 #define MODULE_INIT                     imx_driver_init
 #define MODULE_EXIT                     imx_driver_exit
 
-//#define UART_IMX_USE_TXINTR
-
 /*
  * This determines how often we check the modem status signals
  * for any change.  They generally aren't connected to an IRQ
@@ -71,10 +70,15 @@
  */
 #define MCTRL_TIMEOUT	(250*HZ/1000)
 
+#define TXFIFO_THRESHOLD	2
+#if ((TXFIFO_THRESHOLD < 2) || (TXFIFO_THRESHOLD > 32))
+#  error TXFIFO must be between 2 and 32 characters
+#endif /* ((TXFIFO_THRESHOLD < 2) || (TXFIFO_THRESHOLD > 32)) */
+
 struct imx_port {
 	struct vmm_chardev cd;
 	struct vmm_completion read_possible;
-#if defined(UART_IMX_USE_TXINTR)
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
 	struct vmm_completion write_possible;
 #endif
 	virtual_addr_t base;
@@ -161,6 +165,9 @@ void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 
 	/* trigger interrupt when there is 1 by in the RXFIFO */
 	temp = vmm_readl((void *)(base + UFCR));
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
+	temp = (temp & 0x03FF) | (TXFIFO_THRESHOLD << UFCR_TXTL_SHF);
+#endif /* CONFIG_UART_IMX_USE_TXINTR */
 	vmm_writel((temp & 0xFFC0) | 1, (void *)(base + UFCR));
 
 	/* Divide input clock by 2 */
@@ -185,12 +192,13 @@ void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 		   (void *)(base + UCR2));
 }
 
-#if defined(UART_IMX_USE_TXINTR)
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
 static void imx_txint(struct imx_port *port)
 {
 	port->mask &= ~UCR1_TRDYEN;
 	vmm_writel(port->mask, (void *)port->base + UCR1);
-	vmm_completion_complete(&port->write_possible);
+	vmm_completion_complete_all(&port->write_possible);
+	REINIT_COMPLETION(&port->write_possible);
 }
 #endif
 
@@ -215,8 +223,8 @@ static vmm_irq_return_t imx_irq_handler(int irq, void *dev_id)
 	if (sts & USR1_RRDY) {
 		imx_rxint(port);
 	}
-#if defined(UART_IMX_USE_TXINTR)
-	if ((sts & USR1_TRDY) && (port->mask & UCR1_TXMPTYEN)) {
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
+	if (sts & USR1_TRDY) {
 		imx_txint(port);
 	}
 #endif
@@ -278,12 +286,12 @@ static u32 imx_read(struct vmm_chardev *cdev,
 	return i;
 }
 
-#if defined(UART_IMX_USE_TXINTR)
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
 static void imx_putc_sleepable(struct imx_port *port, u8 ch)
 {
 	/* Wait until there is space in the FIFO */
 	if (!imx_lowlevel_can_putc(port->base)) {
-		/* Enable the RX interrupt */
+		/* Enable the TX interrupt */
 		port->mask |= UCR1_TRDYEN;
 		vmm_writel(port->mask, (void *)port->base + UCR1);
 		/* Wait for completion */
@@ -306,7 +314,7 @@ static u32 imx_write(struct vmm_chardev *cdev,
 	}
 
 	port = cdev->priv;
-#if defined(UART_IMX_USE_TXINTR)
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
 	if (sleep) {
 		for (i = 0; i < len; i++) {
 			imx_putc_sleepable(port, src[i]);
@@ -359,7 +367,7 @@ static int imx_driver_probe(struct vmm_device *dev,
 	port->cd.priv = port;
 
 	INIT_COMPLETION(&port->read_possible);
-#if defined(UART_IMX_USE_TXINTR)
+#if defined(CONFIG_UART_IMX_USE_TXINTR)
 	INIT_COMPLETION(&port->write_possible);
 #endif
 
@@ -369,11 +377,6 @@ static int imx_driver_probe(struct vmm_device *dev,
 	}
 
 	port->mask = UCR1_RRDYEN | UCR1_UARTEN;
-
-#if defined(UART_IMX_USE_TXINTR)
-	port->mask |= UCR1_TRDYEN;
-#endif
-
 	vmm_writel(port->mask, (void *)port->base + UCR1);
 
 	if (vmm_devtree_read_u32(dev->node, "baudrate", &port->baudrate)) {
