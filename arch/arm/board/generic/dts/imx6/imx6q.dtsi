@@ -102,6 +102,12 @@
 				reg = <0x020c8000 0x1000>;
 				interrupts = <49 54 127>;
 			};
+
+			gpc@020dc000 {
+				compatible = "fsl,imx6q-gpc";
+				reg = <0x020dc000 0x4000>;
+				interrupts = <89 90>;
+			};
 		};
 
 		SERIAL1: uart1 {
