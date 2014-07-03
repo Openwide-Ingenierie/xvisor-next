@@ -95,4 +95,9 @@ static inline int VMM_PTR_RET(const void *ptr)
 		return 0;
 }
 
+/* Value set to correspond to Linux definition */
+#define VMM_EROFS		-30	/* Read-only file system */
+#define VMM_BADMSG		-74	/* Not a data message */
+#define VMM_EUCLEAN		117     /* Structure needs cleaning */
+
 #endif
