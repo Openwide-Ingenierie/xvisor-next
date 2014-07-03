@@ -159,7 +159,7 @@
 
 		gpt {
 			device_type = "timer";
-			compatible = "freescale,gpt-timer";
+			compatible = "fsl,imx6q-gpt";
 			reg = <0x02098000 0x4000>;
 			clock-frequency = <1000000>;
 			timer_num = <2>;
