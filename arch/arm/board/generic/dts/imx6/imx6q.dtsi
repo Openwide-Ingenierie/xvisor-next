@@ -108,6 +108,13 @@
 				reg = <0x020dc000 0x4000>;
 				interrupts = <89 90>;
 			};
+
+			clks: ccm@020c4000 {
+				compatible = "fsl,imx6q-ccm";
+				reg = <0x020c4000 0x4000>;
+				interrupts = <0 87 0x04 0 88 0x04>;
+				#clock-cells = <1>;
+			};
 		};
 
 		SERIAL1: uart1 {
