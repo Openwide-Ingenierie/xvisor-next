@@ -164,7 +164,7 @@ void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 	/* disable all UCR2 related interrupts */
 	temp &= ~(UCR2_ATEN | UCR2_ESCI | UCR2_RTSEN);
 	/* Set to 8N1 */
-	temp = temp & ~(UCR2_PREN | UCR2_STPB) | UCR2_WS;
+	temp = (temp & ~(UCR2_PREN | UCR2_STPB)) | UCR2_WS;
 	/* Ignore RTS */
 	temp |= UCR2_IRTS;
 	vmm_writel(temp, (void *)(base + UCR2));
