@@ -46,8 +46,7 @@ static struct clk * __init imx_obtain_fixed_clock_from_dt(const char *name)
 		return NULL;
 	}
 
-	if (VMM_OK != (sprintf(path, "/clocks/%s", name)))
-		return NULL;
+	sprintf(path, "/clocks/%s", name);
 
 	phandle.np = vmm_devtree_getnode(path);
 	kfree(path);
