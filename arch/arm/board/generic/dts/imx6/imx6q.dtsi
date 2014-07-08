@@ -7,6 +7,8 @@
  * Inspired by the Linux Kernel 3.13.6 i.MX6 device tree file.
  */
 
+#include "imx6q-pinfunc.h"
+
 / {
 	#address-cells = <1>;
 	#size-cells = <1>;
@@ -97,6 +99,65 @@
 			reg = <0x02000000 0x100000>;
 			ranges;
 
+			spba-bus@02000000 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				ecspi1: ecspi@02008000 {
+					compatible = "fsl,imx6q-ecspi", "fsl,imx51-ecspi";
+					reg = <0x02008000 0x4000>;
+					interrupts = <63>;
+					clocks = <&clks 112>, <&clks 112>;
+					clock-names = "ipg", "per";
+					status = "disabled";
+				};
+
+				ecspi2: ecspi@0200c000 {
+					compatible = "fsl,imx6q-ecspi", "fsl,imx51-ecspi";
+					reg = <0x0200c000 0x4000>;
+					interrupts = <64>;
+					clocks = <&clks 113>, <&clks 113>;
+					clock-names = "ipg", "per";
+					status = "disabled";
+				};
+
+				ecspi3: ecspi@02010000 {
+					compatible = "fsl,imx6q-ecspi", "fsl,imx51-ecspi";
+					reg = <0x02010000 0x4000>;
+					interrupts = <65>;
+					clocks = <&clks 114>, <&clks 114>;
+					clock-names = "ipg", "per";
+					status = "disabled";
+				};
+
+				ecspi4: ecspi@02014000 {
+					compatible = "fsl,imx6q-ecspi", "fsl,imx51-ecspi";
+					reg = <0x02014000 0x4000>;
+					interrupts = <66>;
+					clocks = <&clks 115>, <&clks 115>;
+					clock-names = "ipg", "per";
+					status = "disabled";
+				};
+
+				ecspi5: ecspi@02018000 {
+					compatible = "fsl,imx6q-ecspi", "fsl,imx51-ecspi";
+					reg = <0x02018000 0x4000>;
+					interrupts = <67>;
+					clocks = <&clks 116>, <&clks 116>;
+					clock-names = "ipg", "per";
+				};
+			};
+
+			gpio3: gpio@020a4000 {
+				compatible = "fsl,imx6q-gpio", "fsl,imx35-gpio";
+				reg = <0x020a4000 0x4000>;
+				interrupts = <0 70 0x04 0 71 0x04>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
 			anatop: anatop@020c8000 {
 				compatible = "fsl,imx6q-anatop", "syscon", "simple-bus";
 				reg = <0x020c8000 0x1000>;
@@ -114,6 +175,20 @@
 				reg = <0x020c4000 0x4000>;
 				interrupts = <0 87 0x04 0 88 0x04>;
 				#clock-cells = <1>;
+			};
+
+			iomuxc: iomuxc@020e0000 {
+				compatible = "fsl,imx6dl-iomuxc", "fsl,imx6q-iomuxc";
+				reg = <0x020e0000 0x4000>;
+				ecspi1 {
+					pinctrl_ecspi1_1: ecspi1grp-1 {
+						fsl,pins = <
+							MX6QDL_PAD_EIM_D17__ECSPI1_MISO 0x100b1
+							MX6QDL_PAD_EIM_D18__ECSPI1_MOSI 0x100b1
+							MX6QDL_PAD_EIM_D16__ECSPI1_SCLK 0x100b1
+						>;
+					};
+				};
 			};
 		};
 
