@@ -1,5 +1,5 @@
 
-/include/ "../imx31.dtsi"
+#include "../imx31.dtsi"
 
 / {
 	model = "kzm";

@@ -1,7 +1,7 @@
 
 /dts-v1/;
 
-/include/ "sun4i-a10-hackberry.dtsi"
+#include "sun4i-a10-hackberry.dtsi"
 
 / {
 	vmm {

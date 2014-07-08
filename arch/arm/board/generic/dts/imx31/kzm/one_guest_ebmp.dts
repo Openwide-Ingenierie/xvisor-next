@@ -1,7 +1,7 @@
 
 /dts-v1/;
 
-/include/ "kzm.dtsi"
+#include "kzm.dtsi"
 
 / {
 	vmm {

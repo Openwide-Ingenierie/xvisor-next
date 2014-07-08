@@ -1,5 +1,5 @@
 
-/include/ "../imx25.dtsi"
+#include "../imx25.dtsi"
 
 / {
 	model = "3dstack";
