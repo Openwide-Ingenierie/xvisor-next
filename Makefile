@@ -51,9 +51,9 @@ else
 	VB := $(VERBOSE_DEFAULT)
 endif
 ifeq ($(VB), 1)
-	V :=
+	override V :=
 else
-	V := $(CMD_PREFIX_DEFAULT)
+	override V := $(CMD_PREFIX_DEFAULT)
 endif
 
 # Name & Version
