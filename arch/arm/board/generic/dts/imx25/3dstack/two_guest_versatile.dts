@@ -1,7 +1,7 @@
 
 /dts-v1/;
 
-/include/ "3dstack.dtsi"
+#include "3dstack.dtsi"
 
 / {
 	vmm {

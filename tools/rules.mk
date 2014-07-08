@@ -4,7 +4,8 @@
 #
 # Copyright (C) 2014 Institut de Recherche Technologique SystemX and OpenWide.
 # Modified by Jimmy Durand Wesolowski <jimmy.durand-wesolowski@openwide.fr>
-# to improve the device tree dependency generation.
+# to improve the device tree dependency generation, and to port the Linux
+# device tree source preprocessing rule.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,10 +32,11 @@ $(build_dir)/tools/dtc/dtc: $(CURDIR)/tools/dtc/Makefile
 	$(V)$(MAKE) -C $(CURDIR)/tools/dtc O=$(build_dir)/tools/dtc
 
 $(build_dir)/%.dts $(build_dir)/%.dep: $(src_dir)/%.dts
-	$(V)mkdir -p $(@D)
 	$(if $(V), @echo " (dtc-dep)   $(subst $(build_dir)/,,$@)")
-	$(V)$(build_dir)/tools/dtc/dtc -d $(build_dir)/$*.dep -I dts \
-	  -o $(build_dir)/$*.dts $<
+	$(V)mkdir -p $(@D)
+	$(V)$(cc) $(cflags) -E -Wp,-MD,$(build_dir)/$*.dep -Wp,-MT,$@ \
+	  -nostdinc -x assembler-with-cpp -undef -D__DTS__ -I$(<D) $< \
+	  -o $(build_dir)/$*.dts
 
 $(build_dir)/%.dtb: $(build_dir)/%.dts $(build_dir)/tools/dtc/dtc
 	$(V)mkdir -p `dirname $@`
@@ -96,4 +98,3 @@ $(build_dir)/%.S: $(build_dir)/%.map $(build_dir)/tools/kallsyms/kallsyms
 	$(V)mkdir -p `dirname $@`
 	$(if $(V), @echo " (kallsyms)  $(subst $(build_dir)/,,$@)")
 	$(V)$(build_dir)/tools/kallsyms/kallsyms --all-symbols < $< > $@
-

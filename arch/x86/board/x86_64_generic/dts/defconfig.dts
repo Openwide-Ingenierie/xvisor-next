@@ -67,4 +67,4 @@
 	};
 };
 
-/include/ "../../common/guests/x86_64_guest.dtsi"
+#include "../../common/guests/x86_64_guest.dtsi"
