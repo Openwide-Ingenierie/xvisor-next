@@ -176,8 +176,7 @@ compile_cpp = $(V)mkdir -p `dirname $(1)`; \
 	     $(cpp) $(cppflags) $(2) | grep -v "\#" > $(1)
 compile_cc_dep = $(V)mkdir -p `dirname $(1)`; \
 	     echo " (cc-dep)    $(subst $(build_dir)/,,$(1))"; \
-	     echo -n `dirname $(1)`/ > $(1); \
-	     $(cc) $(cflags) -I`dirname $(2)` -MM $(2) >> $(1)
+	     $(cc) $(cflags) -I`dirname $(2)` -MT '$(1)'  -MM $(2) >> $(1)
 compile_cc = $(V)mkdir -p `dirname $(1)`; \
 	     echo " (cc)        $(subst $(build_dir)/,,$(1))"; \
 	     $(cc) $(cflags) -DVMM_MODNAME=\"$(subst .o,,$(shell basename $(1)))\" -I`dirname $<` -c $(2) -o $(1)
