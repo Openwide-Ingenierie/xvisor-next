@@ -31,5 +31,7 @@
 #define EROFS			-(VMM_EROFS)
 #define EUCLEAN			-(VMM_EUCLEAN)
 #define EBADMSG			-(VMM_BADMSG)
+#define EREMOTEIO		-(VMM_EREMOTEIO)
+#define EINPROGRESS		-(VMM_EINPROGRESS)
 
 #endif /* defined(_ASM_ERRNO_H) */
