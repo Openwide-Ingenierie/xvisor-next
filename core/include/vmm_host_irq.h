@@ -336,4 +336,33 @@ int vmm_host_irq_unregister(u32 hirq_num,
 /** Interrupts initialization function */
 int vmm_host_irq_init(void);
 
+/*
+ * Entry/exit functions for chained handlers where the primary IRQ chip
+ * may implement either fasteoi or level-trigger flow control.
+ */
+static inline void chained_irq_enter(struct vmm_host_irq_chip *chip,
+                                     struct vmm_host_irq *desc)
+{
+        /* FastEOI controllers require no action on entry. */
+        if (chip->irq_eoi)
+                return;
+
+        if (chip->irq_mask_ack) {
+                chip->irq_mask_ack(desc->handler_data);
+        } else {
+                chip->irq_mask(desc->handler_data);
+                if (chip->irq_ack)
+                        chip->irq_ack(desc->handler_data);
+	}
+}
+
+static inline void chained_irq_exit(struct vmm_host_irq_chip *chip,
+                                    struct vmm_host_irq *desc)
+{
+        if (chip->irq_eoi)
+                chip->irq_eoi(desc->handler_data);
+        else
+                chip->irq_unmask(desc->handler_data);
+}
+
 #endif
