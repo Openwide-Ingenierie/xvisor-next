@@ -1,5 +1,5 @@
 #/**
-# Copyright (c) 2010 Anup Patel.
+# Copyright (C) 2014 Institut de Recherche Technologique SystemX and OpenWide.
 # All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -16,43 +16,14 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
-# @file openconf.cfg
-# @author Anup Patel (anup@brainfault.org)
-# @brief config file for architecture options
+# @file objects.mk
+# @author Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
+# @brief list of SPI driver objects
 # */
 
-choice
-	prompt "Target Architecture"
-	default CONFIG_ARCH_ARM
-	help
-	  The architecture of your target.
+drivers-objs-$(CONFIG_SPI_MASTER)+= spi/spi.o
+# %/input-core.o: $(foreach obj,$(input-core-y),%/$(obj))
+#         $(call merge_objs,$@,$^)
 
-config CONFIG_ARCH_ARM
-	bool "arm"
-	help
-	 ARM support
-
-config CONFIG_ARCH_x86
-	bool "x86"
-	help
-	  Intel ia32 and Intel 64 architecture.
-
-endchoice
-
-config HAS_IOMEM
-        boolean
-        depends on !NO_IOMEM
-        select GENERIC_IO
-        default y
-
-config GENERIC_IO
-        boolean
-        default n
-
-if CONFIG_ARCH_ARM
-source "arch/arm/openconf.cfg"
-endif
-
-if CONFIG_ARCH_x86
-source "arch/x86/openconf.cfg"
-endif
+# %/input-core.dep: $(foreach dep,$(input-core-y:.o=.dep),%/$(dep))
+#         $(call merge_deps,$@,$^)
