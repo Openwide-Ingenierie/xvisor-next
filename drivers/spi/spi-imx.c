@@ -674,7 +674,7 @@ static irqreturn_t spi_imx_isr(int irq, void *dev_id)
 }
 
 static int spi_imx_setupxfer(struct spi_device *spi,
-				 struct spi_transfer *t)
+			     struct spi_transfer *t)
 {
 	struct spi_imx_data *spi_imx = spi_master_get_devdata(spi->master);
 	struct spi_imx_config config;
@@ -707,7 +707,7 @@ static int spi_imx_setupxfer(struct spi_device *spi,
 }
 
 static int spi_imx_transfer(struct spi_device *spi,
-				struct spi_transfer *transfer)
+			    struct spi_transfer *transfer)
 {
 	struct spi_imx_data *spi_imx = spi_master_get_devdata(spi->master);
 
@@ -776,9 +776,25 @@ spi_imx_unprepare_message(struct spi_master *master, struct spi_message *msg)
 	return 0;
 }
 
+/* Bus ID mapping:
+ * (0x02008000 & 0x1C000) >> 14 - 2 -> 0
+ * (0x0200c000 & 0x1C000) >> 14 - 2 -> 1
+ * (0x02010000 & 0x1C000) >> 14 - 2 -> 2
+ * (0x02014000 & 0x1C000) >> 14 - 2 -> 3
+ * (0x02018000 & 0x1C000) >> 14 - 2 -> 4
+ */
+static u16 spi_imx_bus(struct vmm_devtree_node *node)
+{
+	physical_addr_t pa = 0;
+
+	vmm_devtree_regaddr(node, &pa, 0);
+	return ((pa & 0x1C000) >> 14) - 2;
+}
+
 static int spi_imx_probe(struct vmm_device *dev,
 			 const struct vmm_devtree_nodeid *devid)
 {
+	virtual_addr_t vaddr = 0;
 	struct spi_master *master;
 	struct spi_imx_data *spi_imx;
 	int i;
@@ -793,13 +809,14 @@ static int spi_imx_probe(struct vmm_device *dev,
 
 	master = spi_alloc_master(dev, sizeof(struct spi_imx_data) +
 				  sizeof(int) * num_cs);
-	if (!master)
+	if (!master) {
+		dev_err(dev, "cannot allocate master\n");
 		return -ENOMEM;
+	}
 
 	vmm_devdrv_set_data(dev, master);
 
 	master->bits_per_word_mask = SPI_BPW_RANGE_MASK(1, 32);
-	/* master->bus_num = pdev->id; */
 	master->num_chipselect = num_cs;
 
 	spi_imx = spi_master_get_devdata(master);
@@ -815,7 +832,7 @@ static int spi_imx_probe(struct vmm_device *dev,
 		ret = gpio_request(spi_imx->chipselect[i], DRIVER_NAME);
 		if (ret) {
 			dev_err(dev, "can't get cs gpios\n");
-			goto out_master_put;
+			goto out_gpio_free;
 		}
 	}
 
@@ -832,39 +849,42 @@ static int spi_imx_probe(struct vmm_device *dev,
 
 	spi_imx->devtype_data = devid->data;
 
-	ret = vmm_devtree_regmap(dev->node, spi_imx->base, 0);
+	ret = vmm_devtree_regmap(dev->node, &vaddr, 0);
 	if (VMM_OK != ret) {
 		ret = PTR_ERR(spi_imx->base);
-		goto out_master_put;
+		goto out_gpio_free;
 	}
+	spi_imx->base = (void __iomem *)vaddr;
+
+	master->bus_num = spi_imx_bus(dev->node);
 
 	ret = vmm_devtree_irq_get(dev->node, &spi_imx->irq, 0);
 	if (VMM_OK != ret) {
 		ret = PTR_ERR(spi_imx->base);
-		goto out_master_put;
+		goto out_gpio_free;
 	}
 
 	ret = request_irq(spi_imx->irq, spi_imx_isr, 0, DRIVER_NAME, spi_imx);
 	if (VMM_OK != ret) {
 		dev_err(dev, "can't get irq%d: %d\n", spi_imx->irq, ret);
-		goto out_master_put;
+		goto out_gpio_free;
 	}
 
 	spi_imx->clk_ipg = clk_get(dev, "ipg");
 	if (IS_ERR(spi_imx->clk_ipg)) {
 		ret = PTR_ERR(spi_imx->clk_ipg);
-		goto out_master_put;
+		goto out_gpio_free;
 	}
 
 	spi_imx->clk_per = clk_get(dev, "per");
 	if (IS_ERR(spi_imx->clk_per)) {
 		ret = PTR_ERR(spi_imx->clk_per);
-		goto out_master_put;
+		goto out_gpio_free;
 	}
 
 	ret = clk_prepare_enable(spi_imx->clk_per);
 	if (ret)
-		goto out_master_put;
+		goto out_gpio_free;
 
 	ret = clk_prepare_enable(spi_imx->clk_ipg);
 	if (ret)
@@ -883,19 +903,38 @@ static int spi_imx_probe(struct vmm_device *dev,
 		goto out_clk_put;
 	}
 
-	dev_info(dev, "probed\n");
+	master->dev.parent = dev->parent;
+	if (0 != (ret = spi_register_master(master))) {
+		goto out_bitbang_stop;
+	}
 
-	clk_disable(spi_imx->clk_ipg);
-	clk_disable(spi_imx->clk_per);
+	dev_info(dev, "SPI master probed on bus %d\n", master->bus_num);
+
+	/* FIXME: This should not disable the clock, as they are still set as
+	   used by the UART */
+	/* clk_disable(spi_imx->clk_ipg); */
+	/* clk_disable(spi_imx->clk_per); */
 
 	return ret;
 
+out_bitbang_stop:
+	ret = spi_bitbang_stop(&spi_imx->bitbang);
 out_clk_put:
-	clk_disable_unprepare(spi_imx->clk_ipg);
+	/* FIXME: This should not disable the clock, as they are still set as
+	   used by the UART */
+/* 	clk_disable_unprepare(spi_imx->clk_ipg); */
 out_put_per:
-	clk_disable_unprepare(spi_imx->clk_per);
-out_master_put:
+	/* FIXME: This should not disable the clock, as they are still set as
+	   used by the UART */
+/* 	clk_disable_unprepare(spi_imx->clk_per); */
+out_gpio_free:
+	while (i-- > 0) {
+		gpio_free(spi_imx->chipselect[i]);
+	}
+
 	spi_master_put(master);
+
+	dev_err(dev, "probing failed\n");
 
 	return ret;
 }
