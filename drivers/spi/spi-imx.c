@@ -718,9 +718,9 @@ static int spi_imx_transfer(struct spi_device *spi,
 
 	init_completion(&spi_imx->xfer_done);
 
-	spi_imx_push(spi_imx);
-
 	spi_imx->devtype_data->intctrl(spi_imx, MXC_INT_TE);
+
+	spi_imx_push(spi_imx);
 
 	wait_for_completion(&spi_imx->xfer_done);
 
