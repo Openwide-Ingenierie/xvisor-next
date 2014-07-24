@@ -173,11 +173,12 @@ static LIST_HEAD(mxc_gpio_ports);
 
 /* Note: This driver assumes 32 GPIOs are handled in one register */
 
-static int gpio_set_irq_type(struct irq_data *d, u32 type)
+static int gpio_set_irq_type(struct vmm_host_irq *d, u32 type)
 {
 	struct mxc_gpio_port *port = vmm_host_irq_get_chip_data(d);
 	u32 bit, val;
-	u32 gpio_idx = 	fls(d->num) - 1;
+	u32 gpio_idx = d->num;
+	u32 gpio = port->bgc.gc.base + gpio_idx;
 	int edge;
 	void __iomem *reg = port->base;
 
@@ -193,8 +194,7 @@ static int gpio_set_irq_type(struct irq_data *d, u32 type)
 		if (GPIO_EDGE_SEL >= 0) {
 			edge = GPIO_INT_BOTH_EDGES;
 		} else {
-			/* val = gpio_get_value(gpio); */
-			val = readl(reg + GPIO_PSR) & (1 << gpio_idx);
+			val = __gpio_get_value(gpio);
 			if (val) {
 				edge = GPIO_INT_LOW_LEV;
 				pr_debug("mxc: set GPIO %d to low trigger\n", gpio);
@@ -285,10 +285,9 @@ static vmm_irq_return_t mx3_gpio_irq_handler(int irq, void *data)
 {
 	u32 irq_stat;
 	struct vmm_host_irq* desc = NULL;
-	struct mxc_gpio_port *port = NULL;
+	struct mxc_gpio_port *port = data;
 	struct vmm_host_irq_chip *chip = NULL;
 
-	port = vmm_host_irq_get_handler_data(irq);
 	desc = vmm_host_irq_get(irq);
 	chip = vmm_host_irq_get_chip(desc);
 	chained_irq_enter(chip, desc);
@@ -306,10 +305,9 @@ static vmm_irq_return_t mx2_gpio_irq_handler(int irq, void *data)
 {
 	u32 irq_msk, irq_stat;
 	struct vmm_host_irq* desc = NULL;
-	struct mxc_gpio_port *port = NULL;
+	struct mxc_gpio_port *port = data;
 	struct vmm_host_irq_chip *chip = NULL;
 
-	port = vmm_host_irq_get_handler_data(irq);
 	desc = vmm_host_irq_get(irq);
 	chip = vmm_host_irq_get_chip(desc);
 	chained_irq_enter(chip, desc);
@@ -448,7 +446,7 @@ static void mxc_gpio_get_hw(const struct vmm_devtree_nodeid *dev)
 /* 	struct mxc_gpio_port *port = */
 /* 		container_of(bgc, struct mxc_gpio_port, bgc); */
 
-/* 	return irq_find_mapping(port->domain, offset; */
+/* 	return irq_find_mapping(port->domain, offset); */
 /* } */
 
 static int mxc_gpio_to_irq(struct gpio_chip *gc, unsigned offset)
@@ -511,18 +509,16 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 		}
 	}
 
-	/* err = bgpio_init(&port->bgc, dev, 4, */
-	/* 		 port->base + GPIO_PSR, */
-	/* 		 port->base + GPIO_DR, NULL, */
-	/* 		 port->base + GPIO_GDIR, NULL, 0); */
-	/* if (err) */
-	/* 	goto out_bgio; */
+	err = bgpio_init(&port->bgc, dev, 4,
+			 port->base + GPIO_PSR,
+			 port->base + GPIO_DR, NULL,
+			 port->base + GPIO_GDIR, NULL, 0);
+	if (err)
+		goto out_bgio;
 
 	port->bgc.gc.to_irq = mxc_gpio_to_irq;
-	vmm_printf("To be implemented: of_alias_get_id\n");
+	/* port->bgc.gc.base = vmm_devtree_parse_phandle(np, "gpio", 0); */
 	port->bgc.gc.base = 0;
-	/* port->bgc.gc.base = (pdev->id < 0) ? of_alias_get_id(np, "gpio") * 32 : */
-	/* 				     pdev->id * 32; */
 
 	err = gpiochip_add(&port->bgc.gc);
 	if (err)
@@ -556,8 +552,8 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 /* out_gpiochip_remove: */
 /* 	WARN_ON(gpiochip_remove(&port->bgc.gc) < 0); */
 out_bgpio_remove:
-/* 	bgpio_remove(&port->bgc); */
-/* out_bgio: */
+	bgpio_remove(&port->bgc);
+out_bgio:
 	if (port->irq_high > 0)
 		vmm_host_irq_unregister(port->irq_high, dev);
 out_irq_reg_high:
