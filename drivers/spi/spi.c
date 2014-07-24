@@ -72,13 +72,13 @@ static const struct spi_device_id *spi_match_id(const struct spi_device_id *id,
 	return NULL;
 }
 
-/* const struct spi_device_id *spi_get_device_id(const struct spi_device *sdev) */
-/* { */
-/* 	const struct spi_driver *sdrv = to_spi_driver(sdev->dev.driver); */
+const struct spi_device_id *spi_get_device_id(const struct spi_device *sdev)
+{
+	const struct spi_driver *sdrv = to_spi_driver(sdev->dev.driver);
 
-/* 	return spi_match_id(sdrv->id_table, sdev); */
-/* } */
-/* EXPORT_SYMBOL_GPL(spi_get_device_id); */
+	return spi_match_id(sdrv->id_table, sdev);
+}
+EXPORT_SYMBOL_GPL(spi_get_device_id);
 
 static int spi_match_device(struct device *dev, struct device_driver *drv)
 {
@@ -591,7 +591,6 @@ static int spi_init_queue(struct spi_master *master)
 		dev_err(&master->dev, "failed to create message pump task\n");
 		return -ENOMEM;
 	}
-	vmm_threads_wakeup(master->worker_task);
 	INIT_WORK(&master->pump_messages, spi_pump_messages);
 
 	return 0;
@@ -1303,38 +1302,38 @@ EXPORT_SYMBOL_GPL(spi_unregister_master);
 /* } */
 /* EXPORT_SYMBOL_GPL(spi_master_resume); */
 
-/* static int __spi_master_match(struct device *dev, const void *data) */
-/* { */
-/* 	struct spi_master *m; */
-/* 	const u16 *bus_num = data; */
+static int __spi_master_match(struct device *dev, void *data)
+{
+	struct spi_master *m;
+	const u16 *bus_num = data;
 
-/* 	m = container_of(dev, struct spi_master, dev); */
-/* 	return m->bus_num == *bus_num; */
-/* } */
+	m = container_of(dev, struct spi_master, dev);
+	return m->bus_num == *bus_num;
+}
 
-/* /\** */
-/*  * spi_busnum_to_master - look up master associated with bus_num */
-/*  * @bus_num: the master's bus number */
-/*  * Context: can sleep */
-/*  * */
-/*  * This call may be used with devices that are registered after */
-/*  * arch init time.  It returns a refcounted pointer to the relevant */
-/*  * spi_master (which the caller must release), or NULL if there is */
-/*  * no such master registered. */
-/*  *\/ */
-/* struct spi_master *spi_busnum_to_master(u16 bus_num) */
-/* { */
-/* 	struct device		*dev; */
-/* 	struct spi_master	*master = NULL; */
+/**
+ * spi_busnum_to_master - look up master associated with bus_num
+ * @bus_num: the master's bus number
+ * Context: can sleep
+ *
+ * This call may be used with devices that are registered after
+ * arch init time.  It returns a refcounted pointer to the relevant
+ * spi_master (which the caller must release), or NULL if there is
+ * no such master registered.
+ */
+struct spi_master *spi_busnum_to_master(u16 bus_num)
+{
+	struct device		*dev;
+	struct spi_master	*master = NULL;
 
-/* 	dev = class_find_device(&spi_master_class, NULL, &bus_num, */
-/* 				__spi_master_match); */
-/* 	if (dev) */
-/* 		master = container_of(dev, struct spi_master, dev); */
-/* 	/\* reference got in class_find_device *\/ */
-/* 	return master; */
-/* } */
-/* EXPORT_SYMBOL_GPL(spi_busnum_to_master); */
+	dev = vmm_devdrv_class_find_dev(&spi_master_class, &bus_num,
+					__spi_master_match);
+	if (dev)
+		master = container_of(dev, struct spi_master, dev);
+	/* reference got in class_find_device */
+	return master;
+}
+EXPORT_SYMBOL_GPL(spi_busnum_to_master);
 
 
 /* /\*-------------------------------------------------------------------------*\/ */
@@ -1408,117 +1407,117 @@ int spi_setup(struct spi_device *spi)
 }
 EXPORT_SYMBOL_GPL(spi_setup);
 
-/* static int __spi_async(struct spi_device *spi, struct spi_message *message) */
-/* { */
-/* 	struct spi_master *master = spi->master; */
-/* 	struct spi_transfer *xfer; */
+static int __spi_async(struct spi_device *spi, struct spi_message *message)
+{
+	struct spi_master *master = spi->master;
+	struct spi_transfer *xfer;
 
-/* 	message->spi = spi; */
+	message->spi = spi;
 
-/* 	trace_spi_message_submit(message); */
+	/* trace_spi_message_submit(message); */
 
-/* 	if (list_empty(&message->transfers)) */
-/* 		return -EINVAL; */
-/* 	if (!message->complete) */
-/* 		return -EINVAL; */
+	if (list_empty(&message->transfers))
+		return -EINVAL;
+	if (!message->complet)
+		return -EINVAL;
 
-/* 	/\* Half-duplex links include original MicroWire, and ones with */
-/* 	 * only one data pin like SPI_3WIRE (switches direction) or where */
-/* 	 * either MOSI or MISO is missing.  They can also be caused by */
-/* 	 * software limitations. */
-/* 	 *\/ */
-/* 	if ((master->flags & SPI_MASTER_HALF_DUPLEX) */
-/* 			|| (spi->mode & SPI_3WIRE)) { */
-/* 		unsigned flags = master->flags; */
+	/* Half-duplex links include original MicroWire, and ones with
+	 * only one data pin like SPI_3WIRE (switches direction) or where
+	 * either MOSI or MISO is missing.  They can also be caused by
+	 * software limitations.
+	 */
+	if ((master->flags & SPI_MASTER_HALF_DUPLEX)
+			|| (spi->mode & SPI_3WIRE)) {
+		unsigned flags = master->flags;
 
-/* 		list_for_each_entry(xfer, &message->transfers, transfer_list) { */
-/* 			if (xfer->rx_buf && xfer->tx_buf) */
-/* 				return -EINVAL; */
-/* 			if ((flags & SPI_MASTER_NO_TX) && xfer->tx_buf) */
-/* 				return -EINVAL; */
-/* 			if ((flags & SPI_MASTER_NO_RX) && xfer->rx_buf) */
-/* 				return -EINVAL; */
-/* 		} */
-/* 	} */
+		list_for_each_entry(xfer, &message->transfers, transfer_list) {
+			if (xfer->rx_buf && xfer->tx_buf)
+				return -EINVAL;
+			if ((flags & SPI_MASTER_NO_TX) && xfer->tx_buf)
+				return -EINVAL;
+			if ((flags & SPI_MASTER_NO_RX) && xfer->rx_buf)
+				return -EINVAL;
+		}
+	}
 
-/* 	/\** */
-/* 	 * Set transfer bits_per_word and max speed as spi device default if */
-/* 	 * it is not set for this transfer. */
-/* 	 * Set transfer tx_nbits and rx_nbits as single transfer default */
-/* 	 * (SPI_NBITS_SINGLE) if it is not set for this transfer. */
-/* 	 *\/ */
-/* 	list_for_each_entry(xfer, &message->transfers, transfer_list) { */
-/* 		message->frame_length += xfer->len; */
-/* 		if (!xfer->bits_per_word) */
-/* 			xfer->bits_per_word = spi->bits_per_word; */
-/* 		if (!xfer->speed_hz) { */
-/* 			xfer->speed_hz = spi->max_speed_hz; */
-/* 			if (master->max_speed_hz && */
-/* 			    xfer->speed_hz > master->max_speed_hz) */
-/* 				xfer->speed_hz = master->max_speed_hz; */
-/* 		} */
+	/**
+	 * Set transfer bits_per_word and max speed as spi device default if
+	 * it is not set for this transfer.
+	 * Set transfer tx_nbits and rx_nbits as single transfer default
+	 * (SPI_NBITS_SINGLE) if it is not set for this transfer.
+	 */
+	list_for_each_entry(xfer, &message->transfers, transfer_list) {
+		message->frame_length += xfer->len;
+		if (!xfer->bits_per_word)
+			xfer->bits_per_word = spi->bits_per_word;
+		if (!xfer->speed_hz) {
+			xfer->speed_hz = spi->max_speed_hz;
+			if (master->max_speed_hz &&
+			    xfer->speed_hz > master->max_speed_hz)
+				xfer->speed_hz = master->max_speed_hz;
+		}
 
-/* 		if (master->bits_per_word_mask) { */
-/* 			/\* Only 32 bits fit in the mask *\/ */
-/* 			if (xfer->bits_per_word > 32) */
-/* 				return -EINVAL; */
-/* 			if (!(master->bits_per_word_mask & */
-/* 					BIT(xfer->bits_per_word - 1))) */
-/* 				return -EINVAL; */
-/* 		} */
+		if (master->bits_per_word_mask) {
+			/* Only 32 bits fit in the mask */
+			if (xfer->bits_per_word > 32)
+				return -EINVAL;
+			if (!(master->bits_per_word_mask &
+					BIT(xfer->bits_per_word - 1)))
+				return -EINVAL;
+		}
 
-/* 		if (xfer->speed_hz && master->min_speed_hz && */
-/* 		    xfer->speed_hz < master->min_speed_hz) */
-/* 			return -EINVAL; */
-/* 		if (xfer->speed_hz && master->max_speed_hz && */
-/* 		    xfer->speed_hz > master->max_speed_hz) */
-/* 			return -EINVAL; */
+		if (xfer->speed_hz && master->min_speed_hz &&
+		    xfer->speed_hz < master->min_speed_hz)
+			return -EINVAL;
+		if (xfer->speed_hz && master->max_speed_hz &&
+		    xfer->speed_hz > master->max_speed_hz)
+			return -EINVAL;
 
-/* 		if (xfer->tx_buf && !xfer->tx_nbits) */
-/* 			xfer->tx_nbits = SPI_NBITS_SINGLE; */
-/* 		if (xfer->rx_buf && !xfer->rx_nbits) */
-/* 			xfer->rx_nbits = SPI_NBITS_SINGLE; */
-/* 		/\* check transfer tx/rx_nbits: */
-/* 		 * 1. keep the value is not out of single, dual and quad */
-/* 		 * 2. keep tx/rx_nbits is contained by mode in spi_device */
-/* 		 * 3. if SPI_3WIRE, tx/rx_nbits should be in single */
-/* 		 *\/ */
-/* 		if (xfer->tx_buf) { */
-/* 			if (xfer->tx_nbits != SPI_NBITS_SINGLE && */
-/* 				xfer->tx_nbits != SPI_NBITS_DUAL && */
-/* 				xfer->tx_nbits != SPI_NBITS_QUAD) */
-/* 				return -EINVAL; */
-/* 			if ((xfer->tx_nbits == SPI_NBITS_DUAL) && */
-/* 				!(spi->mode & (SPI_TX_DUAL | SPI_TX_QUAD))) */
-/* 				return -EINVAL; */
-/* 			if ((xfer->tx_nbits == SPI_NBITS_QUAD) && */
-/* 				!(spi->mode & SPI_TX_QUAD)) */
-/* 				return -EINVAL; */
-/* 			if ((spi->mode & SPI_3WIRE) && */
-/* 				(xfer->tx_nbits != SPI_NBITS_SINGLE)) */
-/* 				return -EINVAL; */
-/* 		} */
-/* 		/\* check transfer rx_nbits *\/ */
-/* 		if (xfer->rx_buf) { */
-/* 			if (xfer->rx_nbits != SPI_NBITS_SINGLE && */
-/* 				xfer->rx_nbits != SPI_NBITS_DUAL && */
-/* 				xfer->rx_nbits != SPI_NBITS_QUAD) */
-/* 				return -EINVAL; */
-/* 			if ((xfer->rx_nbits == SPI_NBITS_DUAL) && */
-/* 				!(spi->mode & (SPI_RX_DUAL | SPI_RX_QUAD))) */
-/* 				return -EINVAL; */
-/* 			if ((xfer->rx_nbits == SPI_NBITS_QUAD) && */
-/* 				!(spi->mode & SPI_RX_QUAD)) */
-/* 				return -EINVAL; */
-/* 			if ((spi->mode & SPI_3WIRE) && */
-/* 				(xfer->rx_nbits != SPI_NBITS_SINGLE)) */
-/* 				return -EINVAL; */
-/* 		} */
-/* 	} */
+		if (xfer->tx_buf && !xfer->tx_nbits)
+			xfer->tx_nbits = SPI_NBITS_SINGLE;
+		if (xfer->rx_buf && !xfer->rx_nbits)
+			xfer->rx_nbits = SPI_NBITS_SINGLE;
+		/* check transfer tx/rx_nbits:
+		 * 1. keep the value is not out of single, dual and quad
+		 * 2. keep tx/rx_nbits is contained by mode in spi_device
+		 * 3. if SPI_3WIRE, tx/rx_nbits should be in single
+		 */
+		if (xfer->tx_buf) {
+			if (xfer->tx_nbits != SPI_NBITS_SINGLE &&
+				xfer->tx_nbits != SPI_NBITS_DUAL &&
+				xfer->tx_nbits != SPI_NBITS_QUAD)
+				return -EINVAL;
+			if ((xfer->tx_nbits == SPI_NBITS_DUAL) &&
+				!(spi->mode & (SPI_TX_DUAL | SPI_TX_QUAD)))
+				return -EINVAL;
+			if ((xfer->tx_nbits == SPI_NBITS_QUAD) &&
+				!(spi->mode & SPI_TX_QUAD))
+				return -EINVAL;
+			if ((spi->mode & SPI_3WIRE) &&
+				(xfer->tx_nbits != SPI_NBITS_SINGLE))
+				return -EINVAL;
+		}
+		/* check transfer rx_nbits */
+		if (xfer->rx_buf) {
+			if (xfer->rx_nbits != SPI_NBITS_SINGLE &&
+				xfer->rx_nbits != SPI_NBITS_DUAL &&
+				xfer->rx_nbits != SPI_NBITS_QUAD)
+				return -EINVAL;
+			if ((xfer->rx_nbits == SPI_NBITS_DUAL) &&
+				!(spi->mode & (SPI_RX_DUAL | SPI_RX_QUAD)))
+				return -EINVAL;
+			if ((xfer->rx_nbits == SPI_NBITS_QUAD) &&
+				!(spi->mode & SPI_RX_QUAD))
+				return -EINVAL;
+			if ((spi->mode & SPI_3WIRE) &&
+				(xfer->rx_nbits != SPI_NBITS_SINGLE))
+				return -EINVAL;
+		}
+	}
 
-/* 	message->status = -EINPROGRESS; */
-/* 	return master->transfer(spi, message); */
-/* } */
+	message->status = -EINPROGRESS;
+	return master->transfer(spi, message);
+}
 
 /* /\** */
 /*  * spi_async - asynchronous SPI transfer */
@@ -1568,117 +1567,117 @@ EXPORT_SYMBOL_GPL(spi_setup);
 /* } */
 /* EXPORT_SYMBOL_GPL(spi_async); */
 
-/* /\** */
-/*  * spi_async_locked - version of spi_async with exclusive bus usage */
-/*  * @spi: device with which data will be exchanged */
-/*  * @message: describes the data transfers, including completion callback */
-/*  * Context: any (irqs may be blocked, etc) */
-/*  * */
-/*  * This call may be used in_irq and other contexts which can't sleep, */
-/*  * as well as from task contexts which can sleep. */
-/*  * */
-/*  * The completion callback is invoked in a context which can't sleep. */
-/*  * Before that invocation, the value of message->status is undefined. */
-/*  * When the callback is issued, message->status holds either zero (to */
-/*  * indicate complete success) or a negative error code.  After that */
-/*  * callback returns, the driver which issued the transfer request may */
-/*  * deallocate the associated memory; it's no longer in use by any SPI */
-/*  * core or controller driver code. */
-/*  * */
-/*  * Note that although all messages to a spi_device are handled in */
-/*  * FIFO order, messages may go to different devices in other orders. */
-/*  * Some device might be higher priority, or have various "hard" access */
-/*  * time requirements, for example. */
-/*  * */
-/*  * On detection of any fault during the transfer, processing of */
-/*  * the entire message is aborted, and the device is deselected. */
-/*  * Until returning from the associated message completion callback, */
-/*  * no other spi_message queued to that device will be processed. */
-/*  * (This rule applies equally to all the synchronous transfer calls, */
-/*  * which are wrappers around this core asynchronous primitive.) */
-/*  *\/ */
-/* int spi_async_locked(struct spi_device *spi, struct spi_message *message) */
-/* { */
-/* 	struct spi_master *master = spi->master; */
-/* 	int ret; */
-/* 	unsigned long flags; */
+/**
+ * spi_async_locked - version of spi_async with exclusive bus usage
+ * @spi: device with which data will be exchanged
+ * @message: describes the data transfers, including completion callback
+ * Context: any (irqs may be blocked, etc)
+ *
+ * This call may be used in_irq and other contexts which can't sleep,
+ * as well as from task contexts which can sleep.
+ *
+ * The completion callback is invoked in a context which can't sleep.
+ * Before that invocation, the value of message->status is undefined.
+ * When the callback is issued, message->status holds either zero (to
+ * indicate complete success) or a negative error code.  After that
+ * callback returns, the driver which issued the transfer request may
+ * deallocate the associated memory; it's no longer in use by any SPI
+ * core or controller driver code.
+ *
+ * Note that although all messages to a spi_device are handled in
+ * FIFO order, messages may go to different devices in other orders.
+ * Some device might be higher priority, or have various "hard" access
+ * time requirements, for example.
+ *
+ * On detection of any fault during the transfer, processing of
+ * the entire message is aborted, and the device is deselected.
+ * Until returning from the associated message completion callback,
+ * no other spi_message queued to that device will be processed.
+ * (This rule applies equally to all the synchronous transfer calls,
+ * which are wrappers around this core asynchronous primitive.)
+ */
+int spi_async_locked(struct spi_device *spi, struct spi_message *message)
+{
+	struct spi_master *master = spi->master;
+	int ret;
+	unsigned long flags;
 
-/* 	spin_lock_irqsave(&master->bus_lock_spinlock, flags); */
+	spin_lock_irqsave(&master->bus_lock_spinlock, flags);
 
-/* 	ret = __spi_async(spi, message); */
+	ret = __spi_async(spi, message);
 
-/* 	spin_unlock_irqrestore(&master->bus_lock_spinlock, flags); */
+	spin_unlock_irqrestore(&master->bus_lock_spinlock, flags);
 
-/* 	return ret; */
+	return ret;
 
-/* } */
-/* EXPORT_SYMBOL_GPL(spi_async_locked); */
+}
+EXPORT_SYMBOL_GPL(spi_async_locked);
 
 
 /* /\*-------------------------------------------------------------------------*\/ */
 
-/* /\* Utility methods for SPI master protocol drivers, layered on */
-/*  * top of the core.  Some other utility methods are defined as */
-/*  * inline functions. */
-/*  *\/ */
+/* Utility methods for SPI master protocol drivers, layered on
+ * top of the core.  Some other utility methods are defined as
+ * inline functions.
+ */
 
-/* static void spi_complete(void *arg) */
-/* { */
-/* 	complete(arg); */
-/* } */
+static void spi_complete(void *arg)
+{
+	complete(arg);
+}
 
-/* static int __spi_sync(struct spi_device *spi, struct spi_message *message, */
-/* 		      int bus_locked) */
-/* { */
-/* 	DECLARE_COMPLETION_ONSTACK(done); */
-/* 	int status; */
-/* 	struct spi_master *master = spi->master; */
+static int __spi_sync(struct spi_device *spi, struct spi_message *message,
+		      int bus_locked)
+{
+	DECLARE_COMPLETION(done);
+	int status;
+	struct spi_master *master = spi->master;
 
-/* 	message->complete = spi_complete; */
-/* 	message->context = &done; */
+	message->complet = spi_complete;
+	message->context = &done;
 
-/* 	if (!bus_locked) */
-/* 		mutex_lock(&master->bus_lock_mutex); */
+	if (!bus_locked)
+		mutex_lock(&master->bus_lock_mutex);
 
-/* 	status = spi_async_locked(spi, message); */
+	status = spi_async_locked(spi, message);
 
-/* 	if (!bus_locked) */
-/* 		mutex_unlock(&master->bus_lock_mutex); */
+	if (!bus_locked)
+		mutex_unlock(&master->bus_lock_mutex);
 
-/* 	if (status == 0) { */
-/* 		wait_for_completion(&done); */
-/* 		status = message->status; */
-/* 	} */
-/* 	message->context = NULL; */
-/* 	return status; */
-/* } */
+	if (status == 0) {
+		wait_for_completion(&done);
+		status = message->status;
+	}
+	message->context = NULL;
+	return status;
+}
 
-/* /\** */
-/*  * spi_sync - blocking/synchronous SPI data transfers */
-/*  * @spi: device with which data will be exchanged */
-/*  * @message: describes the data transfers */
-/*  * Context: can sleep */
-/*  * */
-/*  * This call may only be used from a context that may sleep.  The sleep */
-/*  * is non-interruptible, and has no timeout.  Low-overhead controller */
-/*  * drivers may DMA directly into and out of the message buffers. */
-/*  * */
-/*  * Note that the SPI device's chip select is active during the message, */
-/*  * and then is normally disabled between messages.  Drivers for some */
-/*  * frequently-used devices may want to minimize costs of selecting a chip, */
-/*  * by leaving it selected in anticipation that the next message will go */
-/*  * to the same chip.  (That may increase power usage.) */
-/*  * */
-/*  * Also, the caller is guaranteeing that the memory associated with the */
-/*  * message will not be freed before this call returns. */
-/*  * */
-/*  * It returns zero on success, else a negative error code. */
-/*  *\/ */
-/* int spi_sync(struct spi_device *spi, struct spi_message *message) */
-/* { */
-/* 	return __spi_sync(spi, message, 0); */
-/* } */
-/* EXPORT_SYMBOL_GPL(spi_sync); */
+/**
+ * spi_sync - blocking/synchronous SPI data transfers
+ * @spi: device with which data will be exchanged
+ * @message: describes the data transfers
+ * Context: can sleep
+ *
+ * This call may only be used from a context that may sleep.  The sleep
+ * is non-interruptible, and has no timeout.  Low-overhead controller
+ * drivers may DMA directly into and out of the message buffers.
+ *
+ * Note that the SPI device's chip select is active during the message,
+ * and then is normally disabled between messages.  Drivers for some
+ * frequently-used devices may want to minimize costs of selecting a chip,
+ * by leaving it selected in anticipation that the next message will go
+ * to the same chip.  (That may increase power usage.)
+ *
+ * Also, the caller is guaranteeing that the memory associated with the
+ * message will not be freed before this call returns.
+ *
+ * It returns zero on success, else a negative error code.
+ */
+int spi_sync(struct spi_device *spi, struct spi_message *message)
+{
+	return __spi_sync(spi, message, 0);
+}
+EXPORT_SYMBOL_GPL(spi_sync);
 
 /* /\** */
 /*  * spi_sync_locked - version of spi_sync with exclusive bus usage */
@@ -1761,78 +1760,78 @@ EXPORT_SYMBOL_GPL(spi_setup);
 
 static u8	*buf;
 
-/* /\** */
-/*  * spi_write_then_read - SPI synchronous write followed by read */
-/*  * @spi: device with which data will be exchanged */
-/*  * @txbuf: data to be written (need not be dma-safe) */
-/*  * @n_tx: size of txbuf, in bytes */
-/*  * @rxbuf: buffer into which data will be read (need not be dma-safe) */
-/*  * @n_rx: size of rxbuf, in bytes */
-/*  * Context: can sleep */
-/*  * */
-/*  * This performs a half duplex MicroWire style transaction with the */
-/*  * device, sending txbuf and then reading rxbuf.  The return value */
-/*  * is zero for success, else a negative errno status code. */
-/*  * This call may only be used from a context that may sleep. */
-/*  * */
-/*  * Parameters to this routine are always copied using a small buffer; */
-/*  * portable code should never use this for more than 32 bytes. */
-/*  * Performance-sensitive or bulk transfer code should instead use */
-/*  * spi_{async,sync}() calls with dma-safe buffers. */
-/*  *\/ */
-/* int spi_write_then_read(struct spi_device *spi, */
-/* 		const void *txbuf, unsigned n_tx, */
-/* 		void *rxbuf, unsigned n_rx) */
-/* { */
-/* 	static DEFINE_MUTEX(lock); */
+/**
+ * spi_write_then_read - SPI synchronous write followed by read
+ * @spi: device with which data will be exchanged
+ * @txbuf: data to be written (need not be dma-safe)
+ * @n_tx: size of txbuf, in bytes
+ * @rxbuf: buffer into which data will be read (need not be dma-safe)
+ * @n_rx: size of rxbuf, in bytes
+ * Context: can sleep
+ *
+ * This performs a half duplex MicroWire style transaction with the
+ * device, sending txbuf and then reading rxbuf.  The return value
+ * is zero for success, else a negative errno status code.
+ * This call may only be used from a context that may sleep.
+ *
+ * Parameters to this routine are always copied using a small buffer;
+ * portable code should never use this for more than 32 bytes.
+ * Performance-sensitive or bulk transfer code should instead use
+ * spi_{async,sync}() calls with dma-safe buffers.
+ */
+int spi_write_then_read(struct spi_device *spi,
+		const void *txbuf, unsigned n_tx,
+		void *rxbuf, unsigned n_rx)
+{
+	static DEFINE_MUTEX(lock);
 
-/* 	int			status; */
-/* 	struct spi_message	message; */
-/* 	struct spi_transfer	x[2]; */
-/* 	u8			*local_buf; */
+	int			status;
+	struct spi_message	message;
+	struct spi_transfer	x[2];
+	u8			*local_buf;
 
-/* 	/\* Use preallocated DMA-safe buffer if we can.  We can't avoid */
-/* 	 * copying here, (as a pure convenience thing), but we can */
-/* 	 * keep heap costs out of the hot path unless someone else is */
-/* 	 * using the pre-allocated buffer or the transfer is too large. */
-/* 	 *\/ */
-/* 	if ((n_tx + n_rx) > SPI_BUFSIZ || !mutex_trylock(&lock)) { */
-/* 		local_buf = kmalloc(max((unsigned)SPI_BUFSIZ, n_tx + n_rx), */
-/* 				    GFP_KERNEL | GFP_DMA); */
-/* 		if (!local_buf) */
-/* 			return -ENOMEM; */
-/* 	} else { */
-/* 		local_buf = buf; */
-/* 	} */
+	/* Use preallocated DMA-safe buffer if we can.  We can't avoid
+	 * copying here, (as a pure convenience thing), but we can
+	 * keep heap costs out of the hot path unless someone else is
+	 * using the pre-allocated buffer or the transfer is too large.
+	 */
+	if ((n_tx + n_rx) > SPI_BUFSIZ || !vmm_mutex_trylock(&lock)) {
+		local_buf = kmalloc(max((unsigned)SPI_BUFSIZ, n_tx + n_rx),
+				    GFP_KERNEL | GFP_DMA);
+		if (!local_buf)
+			return -ENOMEM;
+	} else {
+		local_buf = buf;
+	}
 
-/* 	spi_message_init(&message); */
-/* 	memset(x, 0, sizeof(x)); */
-/* 	if (n_tx) { */
-/* 		x[0].len = n_tx; */
-/* 		spi_message_add_tail(&x[0], &message); */
-/* 	} */
-/* 	if (n_rx) { */
-/* 		x[1].len = n_rx; */
-/* 		spi_message_add_tail(&x[1], &message); */
-/* 	} */
+	spi_message_init(&message);
+	memset(x, 0, sizeof(x));
+	if (n_tx) {
+		x[0].len = n_tx;
+		spi_message_add_tail(&x[0], &message);
+	}
+	if (n_rx) {
+		x[1].len = n_rx;
+		spi_message_add_tail(&x[1], &message);
+	}
 
-/* 	memcpy(local_buf, txbuf, n_tx); */
-/* 	x[0].tx_buf = local_buf; */
-/* 	x[1].rx_buf = local_buf + n_tx; */
+	memcpy(local_buf, txbuf, n_tx);
+	x[0].tx_buf = local_buf;
+	x[1].rx_buf = local_buf + n_tx;
 
-/* 	/\* do the i/o *\/ */
-/* 	status = spi_sync(spi, &message); */
-/* 	if (status == 0) */
-/* 		memcpy(rxbuf, x[1].rx_buf, n_rx); */
+	/* do the i/o */
+	status = spi_sync(spi, &message);
+	if (status == 0)
+		memcpy(rxbuf, x[1].rx_buf, n_rx);
 
-/* 	if (x[0].tx_buf == buf) */
-/* 		mutex_unlock(&lock); */
-/* 	else */
-/* 		kfree(local_buf); */
+	if (x[0].tx_buf == buf)
+		vmm_mutex_unlock(&lock);
+	else
+		kfree(local_buf);
 
-/* 	return status; */
-/* } */
-/* EXPORT_SYMBOL_GPL(spi_write_then_read); */
+	return status;
+}
+EXPORT_SYMBOL_GPL(spi_write_then_read);
 
 /* /\*-------------------------------------------------------------------------*\/ */
 

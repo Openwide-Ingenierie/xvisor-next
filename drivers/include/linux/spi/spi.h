@@ -149,15 +149,15 @@ static inline void spi_dev_put(struct spi_device *spi)
 
 /* /\* device driver data *\/ */
 
-/* static inline void spi_set_drvdata(struct spi_device *spi, void *data) */
-/* { */
-/* 	dev_set_drvdata(&spi->dev, data); */
-/* } */
+static inline void spi_set_drvdata(struct spi_device *spi, void *data)
+{
+	dev_set_drvdata(&spi->dev, data);
+}
 
-/* static inline void *spi_get_drvdata(struct spi_device *spi) */
-/* { */
-/* 	return dev_get_drvdata(&spi->dev); */
-/* } */
+static inline void *spi_get_drvdata(struct spi_device *spi)
+{
+	return dev_get_drvdata(&spi->dev);
+}
 
 struct spi_message;
 struct spi_transfer;
@@ -476,7 +476,7 @@ extern int spi_register_master(struct spi_master *master);
 /* 				    struct spi_master *master); */
 extern void spi_unregister_master(struct spi_master *master);
 
-/* extern struct spi_master *spi_busnum_to_master(u16 busnum); */
+extern struct spi_master *spi_busnum_to_master(u16 busnum);
 
 /*---------------------------------------------------------------------------*/
 
@@ -645,6 +645,8 @@ struct spi_message {
 	 */
 
 	/* completion is reported through a callback */
+	/* FIXME / Note: The original field name is named "complete", but this
+	   is already defined as a macro and mess with this */
 	void			(*complet)(void *context);
 	void			*context;
 	unsigned		frame_length;
