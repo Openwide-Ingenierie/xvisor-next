@@ -1152,59 +1152,66 @@ EXPORT_SYMBOL_GPL(mtd_block_markbad);
 
 /* static struct proc_dir_entry *proc_mtd; */
 
-/* int __init init_mtd(void) */
-/* { */
-/* 	int ret; */
+int __init init_mtd(void)
+{
+	int ret;
 
-/* 	ret = class_register(&mtd_class); */
-/* 	if (ret) */
-/* 		goto err_reg; */
+	ret = class_register(&mtd_class);
+	if (ret)
+		goto err_reg;
 
-/* 	/\* ret = mtd_bdi_init(&mtd_bdi_unmappable, "mtd-unmap"); *\/ */
-/* 	/\* if (ret) *\/ */
-/* 	/\* 	goto err_bdi1; *\/ */
+	/* ret = mtd_bdi_init(&mtd_bdi_unmappable, "mtd-unmap"); */
+	/* if (ret) */
+	/* 	goto err_bdi1; */
 
-/* 	/\* ret = mtd_bdi_init(&mtd_bdi_ro_mappable, "mtd-romap"); *\/ */
-/* 	/\* if (ret) *\/ */
-/* 	/\* 	goto err_bdi2; *\/ */
+	/* ret = mtd_bdi_init(&mtd_bdi_ro_mappable, "mtd-romap"); */
+	/* if (ret) */
+	/* 	goto err_bdi2; */
 
-/* 	/\* ret = mtd_bdi_init(&mtd_bdi_rw_mappable, "mtd-rwmap"); *\/ */
-/* 	/\* if (ret) *\/ */
-/* 	/\* 	goto err_bdi3; *\/ */
+	/* ret = mtd_bdi_init(&mtd_bdi_rw_mappable, "mtd-rwmap"); */
+	/* if (ret) */
+	/* 	goto err_bdi3; */
 
-/* 	/\* proc_mtd = proc_create("mtd", 0, NULL, &mtd_proc_ops); *\/ */
+	/* proc_mtd = proc_create("mtd", 0, NULL, &mtd_proc_ops); */
 
-/* 	ret = init_mtdchar(); */
-/* 	if (ret) */
-/* 		/\* goto out_procfs; *\/ */
-/* 		goto err_bdi1; */
+	/* ret = init_mtdchar(); */
+	/* if (ret) */
+	/* 	/\* goto out_procfs; *\/ */
+	/* 	goto err_bdi1; */
 
-/* 	return 0; */
+	return 0;
 
-/* /\* out_procfs: *\/ */
-/* /\* 	if (proc_mtd) *\/ */
-/* 		/\* remove_proc_entry("mtd", NULL); *\/ */
-/* /\* err_bdi3: *\/ */
-/* /\* 	bdi_destroy(&mtd_bdi_ro_mappable); *\/ */
-/* /\* err_bdi2: *\/ */
-/* /\* 	bdi_destroy(&mtd_bdi_unmappable); *\/ */
+/* out_procfs: */
+/* 	if (proc_mtd) */
+		/* remove_proc_entry("mtd", NULL); */
+/* err_bdi3: */
+/* 	bdi_destroy(&mtd_bdi_ro_mappable); */
+/* err_bdi2: */
+/* 	bdi_destroy(&mtd_bdi_unmappable); */
 /* err_bdi1: */
 /* 	class_unregister(&mtd_class); */
-/* err_reg: */
-/* 	pr_err("Error registering mtd class or bdi: %d\n", ret); */
-/* 	return ret; */
-/* } */
+err_reg:
+	pr_err("Error registering mtd class or bdi: %d\n", ret);
+	return ret;
+}
 
-/* void __exit cleanup_mtd(void) */
-/* { */
-/* 	cleanup_mtdchar(); */
-/* 	/\* if (proc_mtd) *\/ */
-/* 	/\* 	remove_proc_entry("mtd", NULL); *\/ */
-/* 	class_unregister(&mtd_class); */
-/* 	/\* bdi_destroy(&mtd_bdi_unmappable); *\/ */
-/* 	/\* bdi_destroy(&mtd_bdi_ro_mappable); *\/ */
-/* 	/\* bdi_destroy(&mtd_bdi_rw_mappable); *\/ */
-/* } */
+void __exit cleanup_mtd(void)
+{
+	/* cleanup_mtdchar(); */
+	/* if (proc_mtd) */
+	/* 	remove_proc_entry("mtd", NULL); */
+	class_unregister(&mtd_class);
+	/* bdi_destroy(&mtd_bdi_unmappable); */
+	/* bdi_destroy(&mtd_bdi_ro_mappable); */
+	/* bdi_destroy(&mtd_bdi_rw_mappable); */
+}
+
+VMM_DECLARE_MODULE("MTD Core",
+		   "Jimmy Durand Wesolowski",
+		   "GPL",
+		   1,
+		   init_mtd,
+		   cleanup_mtd);
 
 /* module_init(init_mtd); */
 /* module_exit(cleanup_mtd); */
