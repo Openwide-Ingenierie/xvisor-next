@@ -1063,9 +1063,9 @@ static int m25p_probe(struct vmm_device *dev,
 	u32				val = 0;
 	/* struct vmm_devtree_attr		*attr = NULL; */
 	/* struct flash_platform_data	*data = NULL; */
-	/* struct m25p			*flash = NULL; */
-	/* unsigned			i; */
-	/* struct mtd_part_parser_data	ppdata; */
+	struct m25p			*flash = NULL;
+	unsigned			i;
+	struct mtd_part_parser_data	ppdata;
 	/* struct spi_board_info		*chip = NULL; */
 	/* struct vmm_driver		*driver = NULL; */
 
@@ -1121,21 +1121,23 @@ static int m25p_probe(struct vmm_device *dev,
 			nodeid = jid;
 			info = (void *)jid->data;
 		}
+		vmm_printf("Found %s compatible flash device\n",
+			   jid->compatible);
 	}
-out_spi_dev_put:
-	spi_dev_put(spi);
-out:
-	return err;
-
-#if 0
 
 	flash = devm_kzalloc(&spi->dev, sizeof(*flash), GFP_KERNEL);
-	if (!flash)
-		return -ENOMEM;
+	if (!flash) {
+		err = -ENOMEM;
+		dev_err(dev, "failed to allocate flash device\n");
+		goto out_flash_free;
+	}
 
 	flash->command = devm_kzalloc(&spi->dev, MAX_CMD_SIZE, GFP_KERNEL);
-	if (!flash->command)
-		return -ENOMEM;
+	if (!flash->command) {
+		err = -ENOMEM;
+		dev_err(dev, "failed to allocate flash command\n");
+		goto out_command_free;
+	}
 
 	flash->spi = spi;
 	mutex_init(&flash->lock);
@@ -1153,11 +1155,7 @@ out:
 		write_sr(flash, 0);
 	}
 
-	if (data && data->name)
-		flash->mtd.name = data->name;
-	else
-		flash->mtd.name = dev_name(&spi->dev);
-
+	flash->mtd.name = dev_name(&spi->dev);
 	flash->mtd.type = MTD_NORFLASH;
 	flash->mtd.writesize = 1;
 	flash->mtd.flags = MTD_CAP_NORFLASH;
@@ -1197,9 +1195,10 @@ out:
 	flash->page_size = info->page_size;
 	flash->mtd.writebufsize = flash->page_size;
 
-	if (np)
+	if (VMM_OK == vmm_devtree_read_u32_atindex(dev->node, "m25p,fast-read",
+						   &val, 0))
 		/* If we were instantiated by DT, use it */
-		flash->fast_read = of_property_read_bool(np, "m25p,fast-read");
+		flash->fast_read = val;
 	else
 		/* If we weren't instantiated by DT, default to fast-read */
 		flash->fast_read = true;
@@ -1236,22 +1235,27 @@ out:
 		flash->addr_width = 3;
 	}
 
-	dev_info(&spi->dev, "%s (%lld Kbytes)\n", id->name,
-			(long long)flash->mtd.size >> 10);
+	dev_info(&spi->dev, "%s (%lld Kbytes)\n", nodeid->name,
+		 (long long)flash->mtd.size >> 10);
 
-	pr_debug("mtd .name = %s, .size = 0x%llx (%lldMiB) "
-			".erasesize = 0x%.8x (%uKiB) .numeraseregions = %d\n",
-		flash->mtd.name,
-		(long long)flash->mtd.size, (long long)(flash->mtd.size >> 20),
-		flash->mtd.erasesize, flash->mtd.erasesize / 1024,
-		flash->mtd.numeraseregions);
+	/* pr_debug */
+	dev_info(&spi->dev, "mtd\n  .name = %s,\n  .size = 0x%llx (%llMiB)\n"
+		 "  .erasesize = 0x%08x (%uKiB)\n  .numeraseregions = %d\n",
+		 flash->mtd.name,
+		 (long long)flash->mtd.size,
+		 (long long)(flash->mtd.size >> 20),
+		 flash->mtd.erasesize, flash->mtd.erasesize / 1024,
+		 flash->mtd.numeraseregions);
 
 	if (flash->mtd.numeraseregions)
 		for (i = 0; i < flash->mtd.numeraseregions; i++)
-			pr_debug("mtd.eraseregions[%d] = { .offset = 0x%llx, "
-				".erasesize = 0x%.8x (%uKiB), "
-				".numblocks = %d }\n",
-				i, (long long)flash->mtd.eraseregions[i].offset,
+			/* pr_debug */
+			dev_info(&spi->dev, "mtd.eraseregions[%d] = {\n"
+				 "  .offset = 0x%llx,\n"
+				"  .erasesize = 0x%.8x (%uKiB),\n"
+				"  .numblocks = %d\n}\n",
+				i,
+				 (long long)flash->mtd.eraseregions[i].offset,
 				flash->mtd.eraseregions[i].erasesize,
 				flash->mtd.eraseregions[i].erasesize / 1024,
 				flash->mtd.eraseregions[i].numblocks);
@@ -1260,9 +1264,18 @@ out:
 	/* partitions should match sector boundaries; and it may be good to
 	 * use readonly partitions for writeprotected sectors (BP2..BP0).
 	 */
-	return mtd_device_parse_register(&flash->mtd, NULL, &ppdata,
-			data ? data->parts : NULL,
-			data ? data->nr_parts : 0);
+	return mtd_device_parse_register(&flash->mtd, NULL, &ppdata, NULL, 0);
+
+out_command_free:
+	devm_kfree(&spi->dev, flash->command);
+out_flash_free:
+	devm_kfree(&spi->dev, flash);
+out_spi_dev_put:
+	spi_dev_put(spi);
+out:
+	return err;
+
+#if 0
 #endif /* 0 */
 }
 
