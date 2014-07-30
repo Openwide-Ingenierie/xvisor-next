@@ -52,6 +52,9 @@
 #include <libs/stringlib.h>
 #include <libs/mathlib.h>
 #include <drv/imx-uart.h>
+#include <drv/clk.h>
+#include <linux/err.h>
+#include <vmm_delay.h>
 
 #define MODULE_DESC                     "IMX Serial Driver"
 #define MODULE_AUTHOR                   "Jean-Christophe Dubois"
@@ -59,6 +62,8 @@
 #define MODULE_IPRIORITY                0
 #define MODULE_INIT                     imx_driver_init
 #define MODULE_EXIT                     imx_driver_exit
+
+extern const char *__clk_get_name(struct clk *clk);
 
 /*
  * This determines how often we check the modem status signals
@@ -132,38 +137,13 @@ void imx_lowlevel_putc(virtual_addr_t base, u8 ch)
 void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 {
 	unsigned int temp = vmm_readl((void *)(base + UCR1));
-#if 0
 	unsigned int divider;
-	unsigned int remainder;
-#endif
 
 	/* First, disable everything */
 	temp &= ~UCR1_UARTEN;
 	vmm_writel(temp, (void *)base + UCR1);
 
-#if 0
-	/*
-	 * Set baud rate
-	 *
-	 * UBRDIV  = (UART_CLK / (16 * BAUD_RATE)) - 1
-	 * DIVSLOT = MOD(UART_CLK / BAUD_RATE, 16)
-	 */
-	temp = udiv32(input_clock, baudrate);
-	divider = udiv32(temp, 16) - 1;
-	remainder = umod32(temp, 16);
 
-	vmm_out_le16((void *)(base + S3C2410_UBRDIV), (u16)
-		     divider);
-	vmm_out_8((void *)(base + S3C2443_DIVSLOT), (u8)
-		  remainder);
-
-	/* Set the UART to be 8 bits, 1 stop bit, no parity */
-	vmm_out_le32((void *)(base + S3C2410_ULCON),
-		     S3C2410_LCON_CS8 | S3C2410_LCON_PNONE);
-
-	/* enable FIFO, set RX and TX trigger */
-	vmm_out_le32((void *)(base + S3C2410_UFCON), S3C2410_UFCON_DEFAULT);
-#else
 	temp = vmm_readl((void *)(base + UCR2));
 	/* disable all UCR2 related interrupts */
 	temp &= ~(UCR2_ATEN | UCR2_ESCI | UCR2_RTSEN);
@@ -193,6 +173,18 @@ void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 #endif /* CONFIG_UART_IMX_USE_TXINTR */
 	vmm_writel((temp & 0xFFC0) | 1, (void *)(base + UFCR));
 
+	/* Divide input clock by 2 */
+	temp = vmm_readl((void *)(base + UFCR)) & ~UFCR_RFDIV;
+	vmm_writel(temp | UFCR_RFDIV_REG(2), (void *)(base + UFCR));
+	input_clock /= 2;
+
+	divider = udiv32(baudrate, 100) - 1;
+	vmm_writel(divider, (void *)(base + UBIR));
+	/* UBMR = Ref Freq / (16 * baudrate) * (UBIR + 1) - 1 */
+	/* As UBIR = baudrate / 100 - 1, UBMR = Ref Freq / (16 * 100) - 1 */
+	temp = udiv32(input_clock, 16 * 100) - 1;
+	vmm_writel(temp, (void *)(base + UBMR));
+
 	/* enable the UART and the receive interrupt */
 	temp = UCR1_RRDYEN | UCR1_UARTEN;
 	vmm_writel(temp, (void *)(base + UCR1));
@@ -201,7 +193,6 @@ void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 	temp = vmm_readl((void *)(base + UCR2));
 	vmm_writel(temp | UCR2_SRST | UCR2_RXEN | UCR2_TXEN,
 		   (void *)(base + UCR2));
-#endif
 }
 
 #if defined(CONFIG_UART_IMX_USE_TXINTR)
@@ -353,7 +344,10 @@ static int imx_driver_probe(struct vmm_device *dev,
 			    const struct vmm_devtree_nodeid *devid)
 {
 	int rc = VMM_EFAIL;
+	struct clk *clk_ipg = NULL;
+	struct clk *clk_uart = NULL;
 	struct imx_port *port = NULL;
+	unsigned long old_rate = 0;
 
 	port = vmm_zalloc(sizeof(struct imx_port));
 	if (!port) {
@@ -395,14 +389,47 @@ static int imx_driver_probe(struct vmm_device *dev,
 		goto free_reg;
 	}
 
+	clk_ipg = of_clk_get(dev->node, 0);
+	if (IS_ERR(clk_ipg)) {
+		rc = PTR_ERR(clk_ipg);
+		goto free_reg;
+	}
+
+	clk_uart = of_clk_get(dev->node, 1);
+	if (IS_ERR(clk_uart)) {
+		rc = PTR_ERR(clk_uart);
+		goto free_reg;
+	}
+
+	rc = clk_prepare_enable(clk_ipg);
+	if (rc) {
+		rc = ENODEV;
+		goto free_reg;
+	}
+
+	rc = clk_prepare_enable(clk_uart);
+	if (rc) {
+		rc = ENODEV;
+		goto clk_disable_unprepare_ipg;
+	}
+
+	old_rate = clk_get_rate(clk_uart);
+	if (clk_set_rate(clk_uart, port->input_clock)) {
+		vmm_printf("Could not set %s clock rate to %u Hz, "
+			   "actual rate: %u Hz\n", __clk_get_name(clk_uart),
+			   port->input_clock, clk_get_rate(clk_uart));
+		rc = ERANGE;
+		goto clk_disable_unprepare_uart;
+	}
+
 	rc = vmm_devtree_irq_get(dev->node, &port->irq, 0);
 	if (rc) {
-		goto free_reg;
+		goto clk_old_rate;
 	}
 
 	if ((rc = vmm_host_irq_register(port->irq, dev->name,
 					imx_irq_handler, port))) {
-		goto free_reg;
+		goto free_irq;
 	}
 
 	/* Call low-level init function */
@@ -412,6 +439,7 @@ static int imx_driver_probe(struct vmm_device *dev,
 
 	rc = vmm_chardev_register(&port->cd);
 	if (rc) {
+		/* goto unprepare_clk_ipg; */
 		goto free_irq;
 	}
 
@@ -419,13 +447,20 @@ static int imx_driver_probe(struct vmm_device *dev,
 
 	return rc;
 
- free_irq:
+free_irq:
 	vmm_host_irq_unregister(port->irq, port);
- free_reg:
+clk_old_rate:
+	if (old_rate)
+		clk_set_rate(clk_uart, old_rate);
+clk_disable_unprepare_uart:
+	clk_disable_unprepare(clk_uart);
+clk_disable_unprepare_ipg:
+	clk_disable_unprepare(clk_ipg);
+free_reg:
 	vmm_devtree_regunmap(dev->node, port->base, 0);
- free_port:
+free_port:
 	vmm_free(port);
- free_nothing:
+free_nothing:
 	return rc;
 }
 
