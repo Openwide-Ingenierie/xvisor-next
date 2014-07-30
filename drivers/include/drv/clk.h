@@ -180,4 +180,6 @@ struct clk *of_clk_get_by_name(struct vmm_devtree_node *np, const char *name)
 }
 #endif
 
+int clk_dump(struct vmm_chardev *cdev);
+int clk_summary_show(struct vmm_chardev *cdev);
 #endif

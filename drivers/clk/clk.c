@@ -20,6 +20,7 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/sched.h>
+#include <vmm_chardev.h>
 
 #include "clk.h"
 
@@ -39,6 +40,8 @@ static int enable_refcnt;
 static HLIST_HEAD(clk_root_list);
 static HLIST_HEAD(clk_orphan_list);
 static LIST_HEAD(clk_notifier_list);
+
+long clk_get_accuracy(struct clk *clk);
 
 /***           locking             ***/
 static void clk_prepare_lock(void)
@@ -110,27 +113,31 @@ static void clk_enable_unlock(unsigned long flags)
 
 /***        debugfs support        ***/
 
+#if 0
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
 static struct dentry *rootdir;
 static struct dentry *orphandir;
 static int inited = 0;
+#endif /* CONFIG_DEBUG_FS */
+#endif /* 0 */
 
-static void clk_summary_show_one(struct seq_file *s, struct clk *c, int level)
+static void clk_summary_show_one(struct vmm_chardev *cdev, struct clk *c,
+				 int level)
 {
 	if (!c)
 		return;
 
-	seq_printf(s, "%*s%-*s %-11d %-12d %-10lu %-11lu",
-		   level * 3 + 1, "",
-		   30 - level * 3, c->name,
-		   c->enable_count, c->prepare_count, clk_get_rate(c),
-		   clk_get_accuracy(c));
-	seq_printf(s, "\n");
+	vmm_cprintf(cdev, "%*s%-*s %-11d %-12d %-10lu %-11lu",
+		    level * 3 + 1, "",
+		    30 - level * 3, c->name,
+		    c->enable_count, c->prepare_count, clk_get_rate(c),
+		    clk_get_accuracy(c));
+	vmm_cprintf(cdev, "\n");
 }
 
-static void clk_summary_show_subtree(struct seq_file *s, struct clk *c,
+static void clk_summary_show_subtree(struct vmm_chardev *cdev, struct clk *c,
 				     int level)
 {
 	struct clk *child;
@@ -138,26 +145,28 @@ static void clk_summary_show_subtree(struct seq_file *s, struct clk *c,
 	if (!c)
 		return;
 
-	clk_summary_show_one(s, c, level);
+	clk_summary_show_one(cdev, c, level);
 
 	hlist_for_each_entry(child, &c->children, child_node)
-		clk_summary_show_subtree(s, child, level + 1);
+		clk_summary_show_subtree(cdev, child, level + 1);
 }
 
-static int clk_summary_show(struct seq_file *s, void *data)
+int clk_summary_show(struct vmm_chardev *cdev)
 {
 	struct clk *c;
 
-	seq_printf(s, "   clock                        enable_cnt  prepare_cnt  rate        accuracy\n");
-	seq_printf(s, "---------------------------------------------------------------------------------\n");
+	vmm_cprintf(cdev, "   clock                        enable_cnt  prepare"
+		    "_cnt  rate        accuracy\n");
+	vmm_cprintf(cdev, "---------------------------------------------------"
+		    "------------------------------\n");
 
 	clk_prepare_lock();
 
 	hlist_for_each_entry(c, &clk_root_list, child_node)
-		clk_summary_show_subtree(s, c, 0);
+		clk_summary_show_subtree(cdev, c, 0);
 
 	hlist_for_each_entry(c, &clk_orphan_list, child_node)
-		clk_summary_show_subtree(s, c, 0);
+		clk_summary_show_subtree(cdev, c, 0);
 
 	clk_prepare_unlock();
 
@@ -165,6 +174,7 @@ static int clk_summary_show(struct seq_file *s, void *data)
 }
 
 
+#if 0
 static int clk_summary_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, clk_summary_show, inode->i_private);
@@ -176,64 +186,76 @@ static const struct file_operations clk_summary_fops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
+#endif /* 0 */
 
-static void clk_dump_one(struct seq_file *s, struct clk *c, int level)
+static void clk_dump_indent(struct vmm_chardev *cdev, int level)
+{
+	while (level--)
+		vmm_cprintf(cdev, "  ");
+}
+
+static void clk_dump_one(struct vmm_chardev *cdev, struct clk *c, int level)
 {
 	if (!c)
 		return;
 
-	seq_printf(s, "\"%s\": { ", c->name);
-	seq_printf(s, "\"enable_count\": %d,", c->enable_count);
-	seq_printf(s, "\"prepare_count\": %d,", c->prepare_count);
-	seq_printf(s, "\"rate\": %lu", clk_get_rate(c));
-	seq_printf(s, "\"accuracy\": %lu", clk_get_accuracy(c));
+	clk_dump_indent(cdev, level);
+	vmm_cprintf(cdev, "\"%s\": ", c->name);
+	vmm_cprintf(cdev, "enable_count: %d, ", c->enable_count);
+	vmm_cprintf(cdev, "prepare_count: %d, ", c->prepare_count);
+	vmm_cprintf(cdev, "rate: %lu, ", clk_get_rate(c));
+	vmm_cprintf(cdev, "accuracy: %lu", clk_get_accuracy(c));
 }
 
-static void clk_dump_subtree(struct seq_file *s, struct clk *c, int level)
+static void clk_dump_subtree(struct vmm_chardev *cdev, struct clk *c,
+			     int level)
 {
 	struct clk *child;
 
 	if (!c)
 		return;
 
-	clk_dump_one(s, c, level);
+	clk_dump_one(cdev, c, level);
 
-	hlist_for_each_entry(child, &c->children, child_node) {
-		seq_printf(s, ",");
-		clk_dump_subtree(s, child, level + 1);
+	if (!hlist_empty(&c->children))	{
+		vmm_cprintf(cdev, "\n");
+		clk_dump_indent(cdev, level);
+		vmm_cprintf(cdev, "{\n");
+	}
+	else {
+		vmm_cprintf(cdev, ",\n");
 	}
 
-	seq_printf(s, "}");
+	hlist_for_each_entry(child, &c->children, child_node) {
+		clk_dump_subtree(cdev, child, level + 1);
+	}
+
+	if (!hlist_empty(&c->children)) {
+		clk_dump_indent(cdev, level);
+		vmm_cprintf(cdev, "}\n");
+	}
 }
 
-static int clk_dump(struct seq_file *s, void *data)
+int clk_dump(struct vmm_chardev *cdev)
 {
 	struct clk *c;
-	bool first_node = true;
 
-	seq_printf(s, "{");
-
-	clk_prepare_lock();
+	/* clk_prepare_lock(); */
 
 	hlist_for_each_entry(c, &clk_root_list, child_node) {
-		if (!first_node)
-			seq_printf(s, ",");
-		first_node = false;
-		clk_dump_subtree(s, c, 0);
+		clk_dump_subtree(cdev, c, 0);
 	}
 
 	hlist_for_each_entry(c, &clk_orphan_list, child_node) {
-		seq_printf(s, ",");
-		clk_dump_subtree(s, c, 0);
+		clk_dump_subtree(cdev, c, 0);
 	}
 
-	clk_prepare_unlock();
-
-	seq_printf(s, "}");
+	/* clk_prepare_unlock(); */
 	return 0;
 }
+EXPORT_SYMBOL_GPL(clk_dump);
 
-
+#if 0
 static int clk_dump_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, clk_dump, inode->i_private);
