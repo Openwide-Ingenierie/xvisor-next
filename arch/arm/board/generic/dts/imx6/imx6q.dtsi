@@ -60,6 +60,26 @@
 		};
 	};
 
+        clocks {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ckil {
+			compatible = "imx-ckil", "fixed-clock";
+			clock-frequency = <32768>;
+		};
+
+		ckih1 {
+			compatible = "imx-ckih1", "fixed-clock";
+			clock-frequency = <0>;
+		};
+
+		osc {
+			compatible = "imx-osc", "fixed-clock";
+			clock-frequency = <24000000>;
+		};
+	};
+
 	scu { /* Snoop Control Unit */
       		device_type = "scu";
       		compatible = "arm,cortex-a9-scu";
