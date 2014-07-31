@@ -4,6 +4,7 @@
  * Copyright © 2000 Nicolas Pitre <nico@fluxnic.net>
  * Copyright © 2002 Thomas Gleixner <gleixner@linutronix.de>
  * Copyright © 2000-2010 David Woodhouse <dwmw2@infradead.org>
+ * Copyright (C) 2014 Institut de Recherche Technologique SystemX and OpenWide.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +20,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
+ * @file mtdpart.c
+ * @author Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
+ * @brief Simple MTD partitioning layer, taken from the
+ * drivers/mtd/mtdpart.c Linux 3.13.6 kernel.
  */
 
 #include <linux/module.h>

@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @file objects.mk
+ * @file mtdcore.c
  * @author Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
  * @brief MTD core source, taken from the drivers/mtd/mtdcore.c Linux 3.13.6
  * kernel.
