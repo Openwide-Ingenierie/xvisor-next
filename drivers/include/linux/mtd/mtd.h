@@ -407,6 +407,11 @@ static inline int mtd_is_eccerr(int err) {
 	return err == -EBADMSG;
 }
 
+extern struct mtd_info *__mtd_next_device(int i);
+static inline struct mtd_info *mtd_get_device(int i) {
+	return __mtd_next_device(i);
+}
+
 /* static inline int mtd_is_bitflip_or_eccerr(int err) { */
 /* 	return mtd_is_bitflip(err) || mtd_is_eccerr(err); */
 /* } */
