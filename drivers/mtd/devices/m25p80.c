@@ -39,72 +39,10 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
 
-/* Flash opcodes. */
-#define	OPCODE_WREN		0x06	/* Write enable */
-#define	OPCODE_RDSR		0x05	/* Read status register */
-#define	OPCODE_WRSR		0x01	/* Write status register 1 byte */
-#define	OPCODE_NORM_READ	0x03	/* Read data bytes (low frequency) */
-#define	OPCODE_FAST_READ	0x0b	/* Read data bytes (high frequency) */
-#define	OPCODE_PP		0x02	/* Page program (up to 256 bytes) */
-#define	OPCODE_BE_4K		0x20	/* Erase 4KiB block */
-#define	OPCODE_BE_4K_PMC	0xd7	/* Erase 4KiB block on PMC chips */
-#define	OPCODE_BE_32K		0x52	/* Erase 32KiB block */
-#define	OPCODE_CHIP_ERASE	0xc7	/* Erase whole flash chip */
-#define	OPCODE_SE		0xd8	/* Sector erase (usually 64KiB) */
-#define	OPCODE_RDID		0x9f	/* Read JEDEC ID */
+#include <vmm_chardev.h>
 
-/* 4-byte address opcodes - used on Spansion and some Macronix flashes. */
-#define	OPCODE_NORM_READ_4B	0x13	/* Read data bytes (low frequency) */
-#define	OPCODE_FAST_READ_4B	0x0c	/* Read data bytes (high frequency) */
-#define	OPCODE_PP_4B		0x12	/* Page program (up to 256 bytes) */
-#define	OPCODE_SE_4B		0xdc	/* Sector erase (usually 64KiB) */
+#include "m25p80.h"
 
-/* Used for SST flashes only. */
-#define	OPCODE_BP		0x02	/* Byte program */
-#define	OPCODE_WRDI		0x04	/* Write disable */
-#define	OPCODE_AAI_WP		0xad	/* Auto address increment word program */
-
-/* Used for Macronix and Winbond flashes. */
-#define	OPCODE_EN4B		0xb7	/* Enter 4-byte mode */
-#define	OPCODE_EX4B		0xe9	/* Exit 4-byte mode */
-
-/* Used for Spansion flashes only. */
-#define	OPCODE_BRWR		0x17	/* Bank register write */
-
-/* Status Register bits. */
-#define	SR_WIP			1	/* Write in progress */
-#define	SR_WEL			2	/* Write enable latch */
-/* meaning of other SR_* bits may differ between vendors */
-#define	SR_BP0			4	/* Block protect 0 */
-#define	SR_BP1			8	/* Block protect 1 */
-#define	SR_BP2			0x10	/* Block protect 2 */
-#define	SR_SRWD			0x80	/* SR write protect */
-
-/* Define max times to check status register before we give up. */
-#define	MAX_READY_WAIT_JIFFIES	(40 * HZ)	/* M25P16 specs 40s max chip erase */
-#define	MAX_CMD_SIZE		6
-
-#define JEDEC_MFR(_jedec_id)	((_jedec_id) >> 16)
-
-/****************************************************************************/
-
-struct m25p {
-	struct spi_device	*spi;
-	struct mutex		lock;
-	struct mtd_info		mtd;
-	u16			page_size;
-	u16			addr_width;
-	u8			erase_opcode;
-	u8			read_opcode;
-	u8			program_opcode;
-	u8			*command;
-	bool			fast_read;
-};
-
-static inline struct m25p *mtd_to_m25p(struct mtd_info *mtd)
-{
-	return container_of(mtd, struct m25p, mtd);
-}
 
 /****************************************************************************/
 
@@ -1008,6 +946,8 @@ static const struct vmm_devtree_nodeid m25p_ids[] = {
 };
 MODULE_DEVICE_TABLE(spi, m25p_ids);
 
+
+
 static const struct vmm_devtree_nodeid *jedec_probe(struct spi_device *spi)
 {
 	int			tmp;
@@ -1061,13 +1001,10 @@ static int m25p_probe(struct vmm_device *dev,
 	struct spi_master		*master = NULL;
 	struct spi_device		*spi = NULL;
 	u32				val = 0;
-	/* struct vmm_devtree_attr		*attr = NULL; */
-	/* struct flash_platform_data	*data = NULL; */
 	struct m25p			*flash = NULL;
 	unsigned			i;
 	struct mtd_part_parser_data	ppdata;
-	/* struct spi_board_info		*chip = NULL; */
-	/* struct vmm_driver		*driver = NULL; */
+
 
 	if (!dev->parent || !dev->parent->node) {
 		dev_warn(dev, "no parent device to get bus id from\n");
@@ -1085,10 +1022,11 @@ static int m25p_probe(struct vmm_device *dev,
 	}
 
 	if (NULL == (spi = spi_alloc_device(master))) {
-		err = -ENOMEM;
+		err = VMM_ENOMEM;
 		dev_err(dev, "failed to allocate device\n");
 		goto out;
 	}
+	vmm_devdrv_set_data(dev, spi);
 
 	if (VMM_OK == vmm_devtree_read_u32_atindex(dev->node,
 						   "spi-max-frequency",
@@ -1127,14 +1065,14 @@ static int m25p_probe(struct vmm_device *dev,
 
 	flash = devm_kzalloc(&spi->dev, sizeof(*flash), GFP_KERNEL);
 	if (!flash) {
-		err = -ENOMEM;
+		err = VMM_ENOMEM;
 		dev_err(dev, "failed to allocate flash device\n");
 		goto out_flash_free;
 	}
 
 	flash->command = devm_kzalloc(&spi->dev, MAX_CMD_SIZE, GFP_KERNEL);
 	if (!flash->command) {
-		err = -ENOMEM;
+		err = VMM_ENOMEM;
 		dev_err(dev, "failed to allocate flash command\n");
 		goto out_command_free;
 	}
@@ -1155,7 +1093,7 @@ static int m25p_probe(struct vmm_device *dev,
 		write_sr(flash, 0);
 	}
 
-	flash->mtd.name = dev_name(&spi->dev);
+	flash->mtd.name = dev->name;
 	flash->mtd.type = MTD_NORFLASH;
 	flash->mtd.writesize = 1;
 	flash->mtd.flags = MTD_CAP_NORFLASH;
@@ -1260,12 +1198,20 @@ static int m25p_probe(struct vmm_device *dev,
 				flash->mtd.eraseregions[i].erasesize / 1024,
 				flash->mtd.eraseregions[i].numblocks);
 
-
 	/* partitions should match sector boundaries; and it may be good to
 	 * use readonly partitions for writeprotected sectors (BP2..BP0).
 	 */
-	return mtd_device_parse_register(&flash->mtd, NULL, &ppdata, NULL, 0);
+	err = mtd_device_parse_register(&flash->mtd, NULL, &ppdata, NULL, 0);
+	if (0 != err) {
+		dev_err(dev, "Failed to register MTD device\n");
+		goto out_unset_drvdata;
+	}
 
+	m25p_register_chardev(dev);
+	m25p_register_blockdev(dev);
+
+out_unset_drvdata:
+	spi_set_drvdata(spi, NULL);
 out_command_free:
 	devm_kfree(&spi->dev, flash->command);
 out_flash_free:
@@ -1282,15 +1228,24 @@ out:
 
 static int m25p_remove(struct vmm_device *dev)
 {
+	int err = VMM_OK;
 	struct spi_device *spi = vmm_devdrv_get_data(dev);
 	struct m25p	*flash = NULL;
 
 	if (!spi)
-		return 1;
+		return VMM_EFAIL;
 	flash = spi_get_drvdata(spi);
 
 	/* Clean up MTD stuff. */
-	return mtd_device_unregister(&flash->mtd);
+	err = mtd_device_unregister(&flash->mtd);
+	m25p_unregister_blockdev(dev);
+	m25p_unregister_chardev(dev);
+
+	devm_kfree(&spi->dev, flash->command);
+	devm_kfree(&spi->dev, flash);
+	spi_dev_put(spi);
+
+	return err;
 }
 
 

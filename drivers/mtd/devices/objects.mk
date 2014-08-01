@@ -22,3 +22,5 @@
 # */
 
 drivers-objs-$(CONFIG_MTD_M25P80)+= mtd/devices/m25p80.o
+drivers-objs-$(CONFIG_MTD_M25P80)+= mtd/devices/m25p80_chardev.o
+drivers-objs-$(CONFIG_MTD_M25P80_BLOCKDEV)+= mtd/devices/m25p80_blockdev.o
