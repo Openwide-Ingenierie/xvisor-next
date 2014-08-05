@@ -26,22 +26,96 @@
 #include "m25p80.h"
 
 
+static inline struct m25p *vmm_chardev_to_flash(struct vmm_chardev *cdev)
+{
+	struct spi_device	*spi = 0;
+
+	spi = vmm_devdrv_get_data(cdev->dev.parent);
+	if (!spi) {
+		return NULL;
+	}
+
+	return spi_get_drvdata(spi);
+}
+
+#define FLASH_IOCTL_CMD_ERASE	0x1
+
+static void m25p_chardev_erase_cb(__maybe_unused struct erase_info *info)
+{
+}
 
 int m25p_chardev_ioctl(struct vmm_chardev *cdev,
-		       int cmd, void *buf, u32 len)
+		       int cmd, void *arg)
 {
+	struct m25p		*flash = NULL;
+	struct erase_info	info;
+	/* FIXME */
+	size_t			off = 0;
+
+	if (NULL == (flash = vmm_chardev_to_flash(cdev))) {
+		return VMM_EFAIL;
+	}
+
+	switch (cmd) {
+	case FLASH_IOCTL_CMD_ERASE:
+		info.mtd = &flash->mtd;
+		info.addr = (u32)arg;
+		info.len = flash->mtd.erasesize;
+		info.callback = m25p_chardev_erase_cb;
+
+		if (mtd_erase(&flash->mtd, &info)) {
+			dev_err(&cdev->dev, "Erasing at 0x%08X failed\n", off);
+			return VMM_EFAIL;
+		}
+		break;
+	default:
+		dev_err(&cdev->dev, "Unknown command 0x%X\n", cmd);
+		return VMM_EFAIL;
+	}
 	return VMM_OK;
 }
 
 u32 m25p_chardev_read(struct vmm_chardev *cdev,
-		      u8 *dest, u32 len, bool sleep)
+		      u8 *dest, size_t len, off_t *off, bool sleep)
 {
+	unsigned int		retlen = 0;
+	struct m25p		*flash = NULL;
+
+	if (NULL == (flash = vmm_chardev_to_flash(cdev))) {
+		return VMM_EFAIL;
+	}
+
+	if (mtd_read(&flash->mtd, *off, len, &retlen, dest)) {
+		dev_err(&cdev->dev, "Writing at 0x%08X failed\n", off);
+		return VMM_EFAIL;
+	}
+	*off += retlen;
+
 	return VMM_OK;
 }
 
 u32 m25p_chardev_write(struct vmm_chardev *cdev,
-		       u8 *src, u32 len, bool sleep)
+		       u8 *src, size_t len, off_t *off, bool sleep)
 {
+	unsigned int		retlen = 0;
+	u32			block = 0;
+	struct m25p		*flash = NULL;
+
+	if (NULL == (flash = vmm_chardev_to_flash(cdev))) {
+		return VMM_EFAIL;
+	}
+
+	block = *off & ~flash->mtd.erasesize_mask;
+	if (mtd_block_isbad(&flash->mtd, block)) {
+		dev_err(&cdev->dev, "Block at 0x%08X failed\n", block);
+		return VMM_EFAIL;
+	}
+	if (mtd_write(&flash->mtd, *off, len, &retlen, src)) {
+		dev_err(&cdev->dev, "Writing at 0x%08X failed\n", off);
+		return VMM_EFAIL;
+	}
+	*off += retlen;
+
 	return VMM_OK;
 }
 
