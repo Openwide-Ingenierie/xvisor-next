@@ -1613,6 +1613,9 @@ struct mmc_host *mmc_alloc_host(int extra, struct vmm_device *dev)
 	INIT_LIST_HEAD(&host->io_list);
 	INIT_SPIN_LOCK(&host->io_list_lock);
 
+	INIT_MUTEX(&host->slot.lock);
+	host->slot.cd_irq = VMM_EINVALID;
+
 	INIT_COMPLETION(&host->io_avail);
 	host->io_thread = NULL;
 
@@ -1638,7 +1641,7 @@ int mmc_add_host(struct mmc_host *host)
 
 	INIT_COMPLETION(&host->io_avail);
 	vmm_snprintf(name, 32, "mmc%d", mmc_host_count);
-	host->io_thread = vmm_threads_create(name, mmc_host_thread, host, 
+	host->io_thread = vmm_threads_create(name, mmc_host_thread, host,
 					     VMM_THREAD_DEF_PRIORITY,
 					     VMM_THREAD_DEF_TIME_SLICE);
 	if (!host->io_thread) {

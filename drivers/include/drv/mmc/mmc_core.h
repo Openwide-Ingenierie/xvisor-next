@@ -44,6 +44,22 @@
 
 #define MMC_CORE_IPRIORITY		(VMM_BLOCKDEV_CLASS_IPRIORITY + 1)
 
+/* This belongs to host.h */
+#define MMC_BUS_WIDTH_1		0
+#define MMC_BUS_WIDTH_4		2
+#define MMC_BUS_WIDTH_8		3
+
+#define MMC_TIMING_LEGACY	0
+#define MMC_TIMING_MMC_HS	1
+#define MMC_TIMING_SD_HS	2
+#define MMC_TIMING_UHS_SDR12	3
+#define MMC_TIMING_UHS_SDR25	4
+#define MMC_TIMING_UHS_SDR50	5
+#define MMC_TIMING_UHS_SDR104	6
+#define MMC_TIMING_UHS_DDR50	7
+#define MMC_TIMING_MMC_HS200	8
+
+
 #define MMC_DATA_READ			1
 #define MMC_DATA_WRITE			2
 
@@ -62,6 +78,7 @@
 #define MMC_CMD_SET_BLOCKLEN		16
 #define MMC_CMD_READ_SINGLE_BLOCK	17
 #define MMC_CMD_READ_MULTIPLE_BLOCK	18
+#define MMC_CMD_SET_BLOCK_COUNT		23   /* adtc [31:0] data addr   R1  */
 #define MMC_CMD_WRITE_SINGLE_BLOCK	24
 #define MMC_CMD_WRITE_MULTIPLE_BLOCK	25
 #define MMC_CMD_ERASE_GROUP_START	35
@@ -166,6 +183,12 @@
 #define MMC_RSP_BUSY			(1 << 3)	/* card may send busy */
 #define MMC_RSP_OPCODE			(1 << 4)	/* response contains opcode */
 
+#define MMC_CMD_MASK			(3 << 5)	/* non-SPI command type */
+#define MMC_CMD_AC			(0 << 5)
+#define MMC_CMD_ADTC			(1 << 5)
+#define MMC_CMD_BC			(2 << 5)
+#define MMC_CMD_BCR			(3 << 5)
+
 #define MMC_RSP_NONE			(0)
 #define MMC_RSP_R1			(MMC_RSP_PRESENT|MMC_RSP_CRC|MMC_RSP_OPCODE)
 #define MMC_RSP_R1b			(MMC_RSP_PRESENT|MMC_RSP_CRC|MMC_RSP_OPCODE| \
@@ -195,16 +218,34 @@ struct mmc_cmd {
 	u32 resp_type;
 	u32 cmdarg;
 	u32 response[4];
+	struct mmc_data	*data;		/* data segment associated with cmd */
+	struct mmc_request *mrq;	/* associated request */
+	unsigned int		error;	/* command error */
 };
 
 struct mmc_data {
 	union {
 		char *dest;
-		const char *src; /* src buffers don't get written to */
+		const char *src;	/* src buffers don't get written to */
 	};
 	u32 flags;
 	u32 blocks;
 	u32 blocksize;
+	struct mmc_request *mrq;	/* associated request */
+	unsigned int sg_len;		/* size of scatter list */
+	struct scatterlist *sg;		/* I/O scatter list */
+	unsigned int error;		/* data error */
+};
+
+struct mmc_request {
+	struct mmc_cmd		*sbc;		/* SET_BLOCK_COUNT for multiblock */
+	struct mmc_cmd		*cmd;
+	/* struct mmc_data		*data; */
+	struct mmc_cmd		*stop;
+
+	struct vmm_completion	completion;
+	void			(*done)(struct mmc_request *);/* completion function */
+	struct mmc_host		*host;
 };
 
 struct mmc_ios {
@@ -276,6 +317,24 @@ struct mmc_host_ops {
 	int (*get_wp)(struct mmc_host *mmc);
 };
 
+/**
+ * struct mmc_slot - MMC slot functions
+ *
+ * @cd_irq:		MMC/SD-card slot hotplug detection IRQ or -EINVAL
+ * @lock:		protect the @handler_priv pointer
+ * @handler_priv:	MMC/SD-card slot context
+ *
+ * Some MMC/SD host controllers implement slot-functions like card and
+ * write-protect detection natively. However, a large number of controllers
+ * leave these functions to the CPU. This struct provides a hook to attach
+ * such slot-function drivers.
+ */
+struct mmc_slot {
+	int cd_irq;
+	struct vmm_mutex lock;
+	void *handler_priv;
+};
+
 struct mmc_host {
 	struct dlist link;
 	struct vmm_device *dev;
@@ -310,6 +369,12 @@ struct mmc_host {
 #define MMC_CAP_MODE_SPI		0x00000400
 #define MMC_CAP_MODE_HC			0x00000800
 #define MMC_CAP_NEEDS_POLL		0x00001000
+#define MMC_CAP_NONREMOVABLE		0x00002000	/* Nonremovable e.g. eMMC */
+
+	u32 caps2;
+
+#define MMC_CAP2_CD_ACTIVE_HIGH	(1 << 10)	/* Card-detect signal active high */
+#define MMC_CAP2_RO_ACTIVE_HIGH	(1 << 11)	/* Write-protect signal active high */
 
 	u32 f_min;
 	u32 f_max;
@@ -328,6 +393,8 @@ struct mmc_host {
 	struct mmc_ios ios;
 
 	struct mmc_card *card;
+
+	struct mmc_slot slot;
 
 	unsigned long priv[0];
 };

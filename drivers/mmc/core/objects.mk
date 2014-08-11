@@ -21,4 +21,4 @@
 # @brief list of MMC/SD/SDIO core framework objects
 # */
 
-drivers-objs-$(CONFIG_MMC) += mmc/core/mmc_core.o
+drivers-objs-$(CONFIG_MMC) += mmc/core/mmc_core.o mmc/core/slot-gpio.o
