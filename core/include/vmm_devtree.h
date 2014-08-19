@@ -561,6 +561,11 @@ int vmm_devtree_irq_get(struct vmm_devtree_node *node,
  */
 u32 vmm_devtree_irq_count(struct vmm_devtree_node *node);
 
+/** Get device status
+ *  Note: This is based on 'status' attribute of device tree node
+ */
+u32 vmm_devtree_status_get(struct vmm_devtree_node *node);
+
 /** Get physical size of device registers
  *  Note: This is based on 'reg' and 'virtual-reg' attributes 
  *  of device tree node
