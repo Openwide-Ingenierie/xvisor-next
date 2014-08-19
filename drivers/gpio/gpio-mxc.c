@@ -459,7 +459,7 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 {
 	struct device_node *np = dev->node;
 	struct mxc_gpio_port *port;
-	virtual_addr_t vaddr = 0;
+	physical_addr_t paddr = 0;
 	int err;
 
 	mxc_gpio_get_hw(devid);
@@ -468,9 +468,11 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	if (!port)
 		return -ENOMEM;
 
-	if (VMM_OK != (err = vmm_devtree_regmap(np, &vaddr, 0)))
+	err = vmm_devtree_regmap(np, (virtual_addr_t *)&port->base, 0);
+	if (VMM_OK != err) {
+		dev_err(dev, "fail to map registers from the device tree\n");
 		goto out_regmap;
-	port->base = (void*)vaddr;
+	}
 
 	err = vmm_devtree_irq_get(np, &port->irq_high, 1);
 	err = vmm_devtree_irq_get(np, &port->irq, 0);
@@ -517,8 +519,24 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 		goto out_bgio;
 
 	port->bgc.gc.to_irq = mxc_gpio_to_irq;
-	/* port->bgc.gc.base = vmm_devtree_parse_phandle(np, "gpio", 0); */
-	port->bgc.gc.base = 0;
+	/*
+	 * FIXME: As alias does not exist in Xvisor, the node name "gpiox"
+	 * cannot be retrieved, and thus, the gpio id.
+	 */
+	/*
+	 * Get the id from the base address:
+	 * GPIO 1 (idx 0): (0x0209C000 & 0x3C000) >> 14 = 7
+	 * GPIO 2 (idx 1): (0x020A0000 & 0x3C000) >> 14 = 8
+	 * GPIO 3 (idx 2): (0x020A4000 & 0x3C000) >> 14 = 9
+	 * GPIO 4 (idx 3): (0x020A8000 & 0x3C000) >> 14 = 10
+	 * GPIO 5 (idx 4): (0x020AC000 & 0x3C000) >> 14 = 11
+	 * GPIO 6 (idx 5): (0x020B0000 & 0x3C000) >> 14 = 12
+	 * GPIO 7 (idx 6): (0x020B4000 & 0x3C000) >> 14 = 13
+	 */
+	if (VMM_OK != (err = vmm_devtree_regaddr(dev->node, &paddr, 0))) {
+		goto out_bgio;
+	}
+	port->bgc.gc.base = (((paddr & 0x3C000) >> 14) - 7) * 32;
 
 	err = gpiochip_add(&port->bgc.gc);
 	if (err)
@@ -544,6 +562,7 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	}
 
 	list_add_tail(&port->node, &mxc_gpio_ports);
+	dev_info(dev, "GPIO%d registered\n", port->bgc.gc.base / 32 + 1);
 
 	return 0;
 
@@ -560,7 +579,7 @@ out_irq_reg_high:
 	vmm_host_irq_unregister(port->irq, dev);
 out_irq_reg:
 out_irq_get:
-	vmm_devtree_regunmap(np, vaddr, 0);
+	vmm_devtree_regunmap(np, (virtual_addr_t)port->base, 0);
 out_regmap:
 	devm_kfree(dev, port);
 	dev_info(dev, "%s failed with errno %d\n", __func__, err);
