@@ -1055,7 +1055,7 @@ static int m25p_probe(struct vmm_device *dev,
 			 * information, even if it's not 100% accurate.
 			 */
 			dev_warn(&spi->dev, "found %s, expected %s\n",
-				 jid->name, nodeid->name);
+				 jid->compatible, nodeid->compatible);
 			nodeid = jid;
 			info = (void *)jid->data;
 		}
