@@ -905,8 +905,13 @@ static int sdhci_esdhc_imx_probe(struct vmm_device *dev,
 {
 	struct sdhci_host *host;
 	struct esdhc_platform_data *boarddata;
-	int err;
+	u32 err;
 	struct pltfm_imx_data *imx_data;
+
+	if (VMM_OK != (err = vmm_devtree_status_get(dev->node))) {
+		dev_info(dev, "device is disabled\n");
+		return err;
+	}
 
 	host = sdhci_alloc_host(dev, sizeof (struct pltfm_imx_data));
 	if (!host) {
