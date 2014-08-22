@@ -57,4 +57,4 @@ core-objs-y+= vmm_chardev.o
 core-objs-y+= vmm_modules.o
 core-objs-y+= vmm_params.o
 core-objs-$(CONFIG_PROFILE)+= vmm_profiler.o
-
+core-objs-$(CONFIG_EXTENDED_IRQ)+= vmm_host_extended_irq.o

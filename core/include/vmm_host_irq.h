@@ -348,11 +348,11 @@ static inline void chained_irq_enter(struct vmm_host_irq_chip *chip,
                 return;
 
         if (chip->irq_mask_ack) {
-                chip->irq_mask_ack(desc->handler_data);
+                chip->irq_mask_ack(desc);
         } else {
-                chip->irq_mask(desc->handler_data);
+                chip->irq_mask(desc);
                 if (chip->irq_ack)
-                        chip->irq_ack(desc->handler_data);
+                        chip->irq_ack(desc);
 	}
 }
 
@@ -360,9 +360,9 @@ static inline void chained_irq_exit(struct vmm_host_irq_chip *chip,
                                     struct vmm_host_irq *desc)
 {
         if (chip->irq_eoi)
-                chip->irq_eoi(desc->handler_data);
+                chip->irq_eoi(desc);
         else
-                chip->irq_unmask(desc->handler_data);
+                chip->irq_unmask(desc);
 }
 
 #endif
