@@ -8,6 +8,10 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
+ *
+ * @file slot-gpio.c
+ * @author Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
+ * @brief Generic GPIO card-detect helper
  */
 
 #include <linux/err.h>
@@ -198,6 +202,9 @@ int mmc_gpio_request_cd(struct mmc_host *host, unsigned int gpio,
 		/* 	ctx->cd_label, host); */
 		ret = vmm_host_irq_register(irq, host->dev->name,
 					    mmc_gpio_cd_irqt, host);
+		if (ret < 0)
+			irq = ret;
+		ret = vmm_host_irq_set_type(irq, VMM_IRQ_TYPE_EDGE_BOTH);
 		if (ret < 0)
 			irq = ret;
 	}
