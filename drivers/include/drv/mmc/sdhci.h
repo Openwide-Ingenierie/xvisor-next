@@ -293,6 +293,9 @@
 /* Controller does not provide transfer-complete interrupt when not busy */
 #define SDHCI_QUIRK_NO_BUSY_IRQ			(1 << 14)
 /* Controller has nonstandard clock management */
+
+/* Controller reports inverted write-protect state */
+#define SDHCI_QUIRK_INVERTED_WRITE_PROTECT	(1 << 16)
 #define SDHCI_QUIRK_NONSTANDARD_CLOCK		(1 << 17)
 /* Controller does not like fast PIO transfers */
 #define SDHCI_QUIRK_PIO_NEEDS_DELAY		(1 << 18)
@@ -310,7 +313,8 @@
 #define SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC	(1 << 26)
 /* Controller treats ADMA descriptors with length 0000h incorrectly */
 #define SDHCI_QUIRK_BROKEN_ADMA_ZEROLEN_DESC	(1 << 30)
-
+/* The read-only detection via SDHCI_PRESENT_STATE register is unstable */
+#define SDHCI_QUIRK_UNSTABLE_RO_DETECT		(1 << 31)
 
 #define SDHCI_QUIRK2_HOST_OFF_CARD_ON			(1<<0)
 #define SDHCI_QUIRK2_HOST_NO_CMD23			(1<<1)
@@ -342,6 +346,7 @@ struct sdhci_ops {
 #endif
 	void (*set_control_reg)(struct sdhci_host *host);
 	void (*set_clock)(struct sdhci_host *host, unsigned int div);
+	unsigned int	(*get_wp)(struct sdhci_host *host);
 };
 
 struct sdhci_host {

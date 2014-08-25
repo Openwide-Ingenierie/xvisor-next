@@ -12,7 +12,7 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License.
  *
- * @file mtdcore.c
+ * @file sdhci-esdhc-imx.c
  * @author Jimmy Durand Wesolowski (jimmy.durand-wesolowski@openwide.fr)
  * @brief Freescale eSDHC i.MX controller driver for the platform bus adapted
  * for Xvisor
