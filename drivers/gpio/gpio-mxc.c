@@ -41,6 +41,7 @@
 #include <linux/of_device.h>
 #include <linux/module.h>
 /* #include <asm-generic/bug.h> */
+#include <vmm_host_extended_irq.h>
 
 enum mxc_gpio_hwtype {
 	IMX1_GPIO,	/* runs on i.mx1 */
@@ -70,7 +71,7 @@ struct mxc_gpio_port {
 	void __iomem* base;
 	u32 irq;
 	u32 irq_high;
-	struct irq_domain *domain;
+	struct vmm_host_extirqs *extirqs;
 	struct bgpio_chip bgc;
 	u32 both_edges;
 };
@@ -265,6 +266,7 @@ static void mxc_flip_edge(struct mxc_gpio_port *port, u32 gpio)
 /* handle 32 interrupts in one status register */
 static void mxc_gpio_irq_handler(struct mxc_gpio_port *port, u32 irq_stat)
 {
+	u32 irq_num = 0;
 	struct vmm_host_irq *irq;
 
 	while (irq_stat != 0) {
@@ -273,8 +275,10 @@ static void mxc_gpio_irq_handler(struct mxc_gpio_port *port, u32 irq_stat)
 		if (port->both_edges & (1 << irqoffset))
 			mxc_flip_edge(port, irqoffset);
 
-		irq = vmm_host_irq_get(irqoffset);
-		irq->handler(irq, irqoffset, port);
+		irq_num = vmm_host_extirq_get_irq(port->extirqs, irqoffset);
+		irq = vmm_host_irq_get(irq_num);
+		if (irq->handler)
+			irq->handler(irq, irq_num, port);
 
 		irq_stat &= ~(1 << irqoffset);
 	}
@@ -285,10 +289,14 @@ static vmm_irq_return_t mx3_gpio_irq_handler(int irq, void *data)
 {
 	u32 irq_stat;
 	struct vmm_host_irq* desc = NULL;
-	struct mxc_gpio_port *port = data;
+	struct mxc_gpio_port *port = NULL;
 	struct vmm_host_irq_chip *chip = NULL;
 
 	desc = vmm_host_irq_get(irq);
+	chip = vmm_host_irq_get_chip(desc);
+	port = vmm_host_irq_get_chip_data(desc);
+
+	vmm_printf("IRQ %d - %s - 0x%X\n", irq, desc->name, port->base);
 	chip = vmm_host_irq_get_chip(desc);
 	chained_irq_enter(chip, desc);
 
@@ -305,11 +313,12 @@ static vmm_irq_return_t mx2_gpio_irq_handler(int irq, void *data)
 {
 	u32 irq_msk, irq_stat;
 	struct vmm_host_irq* desc = NULL;
-	struct mxc_gpio_port *port = data;
+	struct mxc_gpio_port *port = NULL;
 	struct vmm_host_irq_chip *chip = NULL;
 
 	desc = vmm_host_irq_get(irq);
 	chip = vmm_host_irq_get_chip(desc);
+	port = vmm_host_irq_get_chip_data(desc);
 	chained_irq_enter(chip, desc);
 
 	/* walk through all interrupt status registers */
@@ -346,7 +355,7 @@ void irq_gc_ack_set_bit(struct vmm_host_irq *d)
 {
 	struct vmm_host_irq_chip *gc = vmm_host_irq_get_chip(d);
 	struct mxc_gpio_port *port = vmm_host_irq_get_chip_data(d);
-	int irqoffset = fls(d->num) - 1;
+	int irqoffset = vmm_host_extirqs_get_offset(port->extirqs, d->num);
 
 	irq_gc_lock(gc);
 	writel(1 << irqoffset, port->base + GPIO_ISR);
@@ -364,7 +373,7 @@ void irq_gc_mask_clr_bit(struct vmm_host_irq *d)
 {
 	struct vmm_host_irq_chip *gc = vmm_host_irq_get_chip(d);
 	struct mxc_gpio_port *port = vmm_host_irq_get_chip_data(d);
-	int irqoffset = fls(d->num) - 1;
+	int irqoffset = vmm_host_extirqs_get_offset(port->extirqs, d->num);
 	u32 mask = 0;
 
 	irq_gc_lock(gc);
@@ -384,7 +393,7 @@ void irq_gc_mask_set_bit(struct irq_data *d)
 {
 	struct vmm_host_irq_chip *gc = vmm_host_irq_get_chip(d);
 	struct mxc_gpio_port *port = vmm_host_irq_get_chip_data(d);
-	int irqoffset = fls(d->num) - 1;
+	int irqoffset = vmm_host_extirqs_get_offset(port->extirqs, d->num);
 	u32 mask = 0;
 
 	irq_gc_lock(gc);
@@ -440,18 +449,13 @@ static void mxc_gpio_get_hw(const struct vmm_devtree_nodeid *dev)
 	mxc_gpio_hwtype = hwtype;
 }
 
-/* static int mxc_gpio_to_irq(struct gpio_chip *gc, unsigned offset) */
-/* { */
-/* 	struct bgpio_chip *bgc = to_bgpio_chip(gc); */
-/* 	struct mxc_gpio_port *port = */
-/* 		container_of(bgc, struct mxc_gpio_port, bgc); */
-
-/* 	return irq_find_mapping(port->domain, offset); */
-/* } */
-
 static int mxc_gpio_to_irq(struct gpio_chip *gc, unsigned offset)
 {
-	return offset;
+	struct bgpio_chip *bgc = to_bgpio_chip(gc);
+	struct mxc_gpio_port *port =
+		container_of(bgc, struct mxc_gpio_port, bgc);
+
+	return vmm_host_extirq_get_irq(port->extirqs, offset);
 }
 
 static int mxc_gpio_probe(struct vmm_device *dev,
@@ -461,6 +465,8 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	struct mxc_gpio_port *port;
 	physical_addr_t paddr = 0;
 	int err;
+	int port_num = 0;
+	char name[11];
 
 	mxc_gpio_get_hw(devid);
 
@@ -536,7 +542,8 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	if (VMM_OK != (err = vmm_devtree_regaddr(dev->node, &paddr, 0))) {
 		goto out_bgio;
 	}
-	port->bgc.gc.base = (((paddr & 0x3C000) >> 14) - 7) * 32;
+	port_num = ((paddr & 0x3C000) >> 14) - 6;
+	port->bgc.gc.base = (port_num - 1) * 32;
 
 	err = gpiochip_add(&port->bgc.gc);
 	if (err)
@@ -548,28 +555,29 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	/* 	goto out_gpiochip_remove; */
 	/* } */
 
-	/* port->domain = irq_domain_add_legacy(np, 32, irq_base, 0, */
-	/* 				     &irq_domain_simple_ops, NULL); */
-	/* if (!port->domain) { */
-	/* 	err = -ENODEV; */
-	/* 	goto out_irqdesc_free; */
-	/* } */
-
 	/* gpio-mxc can be a generic irq chip */
 	mxc_gpio_init_gc(port, port->irq);
 	if (port->irq_high > 0) {
 		mxc_gpio_init_gc(port, port->irq_high);
 	}
 
+	snprintf(name, sizeof (name), "gpio_mxc%d", port_num);
+	/* FIXME: Should be split across irq and irqhigh */
+	if (VMM_OK != vmm_host_extirq_map(port->irq, name, 32, dev,
+					  &port->extirqs)) {
+		err = -ENODEV;
+		goto out_gpiochip_remove;
+	}
+
 	list_add_tail(&port->node, &mxc_gpio_ports);
-	dev_info(dev, "GPIO%d registered\n", port->bgc.gc.base / 32 + 1);
+	dev_info(dev, "%s registered\n", name);
 
 	return 0;
 
 /* out_irqdesc_free: */
 /* 	irq_free_descs(irq_base, 32); */
-/* out_gpiochip_remove: */
-/* 	WARN_ON(gpiochip_remove(&port->bgc.gc) < 0); */
+out_gpiochip_remove:
+	WARN_ON(gpiochip_remove(&port->bgc.gc) < 0);
 out_bgpio_remove:
 	bgpio_remove(&port->bgc);
 out_bgio:
