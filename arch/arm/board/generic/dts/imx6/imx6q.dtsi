@@ -166,7 +166,7 @@
 			clks: ccm@020c4000 {
 				compatible = "fsl,imx6q-ccm";
 				reg = <0x020c4000 0x4000>;
-				interrupts = <0 87 0x04 0 88 0x04>;
+				interrupts = <87 88>;
 				#clock-cells = <1>;
 			};
 
