@@ -66,6 +66,8 @@ extern void host_irq_init_irq(struct vmm_host_irq *irq,
 int vmm_host_extirq_map(u32 hwirq,
 			const char *basename,
 			u32 size,
+			struct vmm_host_irq_chip *chip,
+			void *chip_data,
 			void *dev,
 			struct vmm_host_extirqs **group)
 {
@@ -76,8 +78,6 @@ int vmm_host_extirq_map(u32 hwirq,
 	struct vmm_host_irq *irq = NULL;
 	irq_flags_t flags;
 	struct vmm_host_extirqs* extirqs = NULL;
-	struct vmm_host_irq_chip *chip = NULL;
-	void *chip_data = NULL;
 
 	/* We support only up to 999 IRQs by extended IRQ group */
 	if (size > 999)
@@ -88,11 +88,13 @@ int vmm_host_extirq_map(u32 hwirq,
 		return VMM_EFAIL;
 	}
 
-	if (NULL == (chip = vmm_host_irq_get_chip(irq))) {
-		vmm_printf("HW IRQ %d chip is not set\n", hwirq);
+	if ((NULL == chip) && (NULL == (chip = vmm_host_irq_get_chip(irq)))) {
+			vmm_printf("HW IRQ %d chip is not set\n", hwirq);
 		return VMM_EFAIL;
 	}
-	chip_data = vmm_host_irq_get_chip_data(irq);
+	if (NULL == chip_data) {
+		chip_data = vmm_host_irq_get_chip_data(irq);
+	}
 
 	vmm_spin_lock_irqsave(&extirqctrl.lock, flags);
 	if (CONFIG_EXTENDED_IRQ_GROUP_NB <= extirqctrl.count) {
@@ -114,6 +116,7 @@ int vmm_host_extirq_map(u32 hwirq,
 		name = vmm_malloc(len);
 		vmm_snprintf(name, len, "%s.%d", basename, i + 1);
 		host_irq_init_irq(irq, extirqctrl.base);
+		irq->name = name;
 		irq->chip = chip;
 		irq->chip_data = chip_data;
 		extirqctrl.irqs[extirqctrl.base - CONFIG_HOST_IRQ_COUNT] = irq;

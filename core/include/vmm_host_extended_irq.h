@@ -49,6 +49,8 @@ u32 vmm_host_extirqs_get_offset(struct vmm_host_extirqs *group,
 int vmm_host_extirq_map(u32 hwirq,
 			const char *name,
 			u32 size,
+			struct vmm_host_irq_chip *chip,
+			void *chip_data,
 			void *dev,
 			struct vmm_host_extirqs **extirqs);
 
