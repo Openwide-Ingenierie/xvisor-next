@@ -180,7 +180,6 @@ int mmc_gpio_request_cd(struct mmc_host *host, unsigned int gpio,
 		 * is destroyed.
 		 */
 		return ret;
-
 	if (debounce) {
 		ret = gpio_set_debounce(gpio, debounce);
 		if (ret < 0)
@@ -200,11 +199,11 @@ int mmc_gpio_request_cd(struct mmc_host *host, unsigned int gpio,
 		/* 	NULL, mmc_gpio_cd_irqt, */
 		/* 	IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT, */
 		/* 	ctx->cd_label, host); */
-		ret = vmm_host_irq_register(irq, host->dev->name,
-					    mmc_gpio_cd_irqt, host);
+		ret = vmm_host_irq_set_type(irq, VMM_IRQ_TYPE_EDGE_BOTH);
 		if (ret < 0)
 			irq = ret;
-		ret = vmm_host_irq_set_type(irq, VMM_IRQ_TYPE_EDGE_BOTH);
+		ret = vmm_host_irq_register(irq, host->dev->name,
+					    mmc_gpio_cd_irqt, host);
 		if (ret < 0)
 			irq = ret;
 	}
