@@ -404,11 +404,10 @@ void irq_gc_mask_set_bit(struct irq_data *d)
 }
 
 static int __init mxc_gpio_init_gc(struct mxc_gpio_port *port, int irq_base,
-				    int port_num, int sz,
+				    const char *name, int sz,
 				    struct vmm_device *dev)
 {
 	struct vmm_host_irq_chip *gc;
-	char name[12];
 
 	if (NULL == (gc = vmm_zalloc(sizeof (struct vmm_host_irq_chip))))
 	{
@@ -422,14 +421,12 @@ static int __init mxc_gpio_init_gc(struct mxc_gpio_port *port, int irq_base,
 	gc->irq_unmask = irq_gc_mask_set_bit;
 	gc->irq_set_type = gpio_set_irq_type;
 
-	snprintf(name, sizeof (name), "gpio_mxc%d", port_num);
 	if (VMM_OK != vmm_host_extirq_map(irq_base, name, sz, gc, port, dev,
 					  &port->extirqs)) {
 		pr_err("mxc: Failed to map extended IRQs\n");
 		vmm_free(gc);
 		return -ENODEV;
 	}
-	dev_info(dev, "%s registered\n", name);
 
 	return VMM_OK;
 }
@@ -472,6 +469,8 @@ static int mxc_gpio_to_irq(struct gpio_chip *gc, unsigned offset)
 	return vmm_host_extirq_get_irq(port->extirqs, offset);
 }
 
+#define PORT_NAME_LEN	12
+
 static int mxc_gpio_probe(struct vmm_device *dev,
 			  const struct vmm_devtree_nodeid *devid)
 {
@@ -480,6 +479,8 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	physical_addr_t paddr = 0;
 	int err = VMM_OK;
 	int port_num = 0;
+	char *name = NULL;
+	char *irq_name = NULL;
 
 	mxc_gpio_get_hw(devid);
 
@@ -498,30 +499,58 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 	if (VMM_OK != err)
 		goto out_irq_get;
 
+	/*
+	 * FIXME: As alias does not exist in Xvisor, the node name "gpiox"
+	 * cannot be retrieved, and thus, the gpio id.
+	 */
+	/*
+	 * Get the id from the base address:
+	 * GPIO 1 (idx 0): (0x0209C000 & 0x3C000) >> 14 = 7
+	 * GPIO 2 (idx 1): (0x020A0000 & 0x3C000) >> 14 = 8
+	 * GPIO 3 (idx 2): (0x020A4000 & 0x3C000) >> 14 = 9
+	 * GPIO 4 (idx 3): (0x020A8000 & 0x3C000) >> 14 = 10
+	 * GPIO 5 (idx 4): (0x020AC000 & 0x3C000) >> 14 = 11
+	 * GPIO 6 (idx 5): (0x020B0000 & 0x3C000) >> 14 = 12
+	 * GPIO 7 (idx 6): (0x020B4000 & 0x3C000) >> 14 = 13
+	 */
+	if (VMM_OK != (err = vmm_host_va2pa(port->base, &paddr))) {
+		goto out_bgio;
+	}
+	port_num = ((paddr & 0x3C000) >> 14) - 6;
+	name = vmm_malloc(PORT_NAME_LEN);
+	snprintf(name, PORT_NAME_LEN, "gpio_mxc%d", port_num);
+
 	/* disable the interrupt and clear the status */
 	writel(0, port->base + GPIO_IMR);
 	writel(~0, port->base + GPIO_ISR);
 
 	if (mxc_gpio_hwtype == IMX21_GPIO) {
+		irq_name = vmm_malloc(PORT_NAME_LEN);
+		strncpy(irq_name, name, PORT_NAME_LEN);
 		/*
 		 * Setup one handler for all GPIO interrupts. Actually setting
 		 * the handler is needed only once, but doing it for every port
 		 * is more robust and easier.
 		 */
-		err = vmm_host_irq_register(port->irq, "gpio-mxc",
+		err = vmm_host_irq_register(port->irq, irq_name,
 					    mx2_gpio_irq_handler, port);
 		if (VMM_OK != err)
 			goto out_irq_reg;
 	} else {
 		/* setup one handler for each entry */
-		err = vmm_host_irq_register(port->irq, "gpio-mxc 0-15",
+		irq_name = vmm_malloc(PORT_NAME_LEN + 5);
+		snprintf(irq_name, PORT_NAME_LEN + 5, "gpio_mxc%d 0-15",
+			 port_num);
+		err = vmm_host_irq_register(port->irq, irq_name,
 					    mx3_gpio_irq_handler, port);
 		if (VMM_OK != err)
 			goto out_irq_reg;
 		if (port->irq_high > 0) {
 			/* setup handler for GPIO 16 to 31 */
-			err = vmm_host_irq_register(port->irq_high,
-						    "gpio-mxc 16-31",
+			irq_name = vmm_malloc(PORT_NAME_LEN + 6);
+			snprintf(irq_name, PORT_NAME_LEN + 6,
+				 "gpio_mxc%d 16-31", port_num);
+			err = vmm_host_irq_register(port->irq_high, irq_name,
 						    mx3_gpio_irq_handler,
 						    port);
 			if (VMM_OK != err)
@@ -537,42 +566,19 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 		goto out_bgio;
 
 	port->bgc.gc.to_irq = mxc_gpio_to_irq;
-	/*
-	 * FIXME: As alias does not exist in Xvisor, the node name "gpiox"
-	 * cannot be retrieved, and thus, the gpio id.
-	 */
-	/*
-	 * Get the id from the base address:
-	 * GPIO 1 (idx 0): (0x0209C000 & 0x3C000) >> 14 = 7
-	 * GPIO 2 (idx 1): (0x020A0000 & 0x3C000) >> 14 = 8
-	 * GPIO 3 (idx 2): (0x020A4000 & 0x3C000) >> 14 = 9
-	 * GPIO 4 (idx 3): (0x020A8000 & 0x3C000) >> 14 = 10
-	 * GPIO 5 (idx 4): (0x020AC000 & 0x3C000) >> 14 = 11
-	 * GPIO 6 (idx 5): (0x020B0000 & 0x3C000) >> 14 = 12
-	 * GPIO 7 (idx 6): (0x020B4000 & 0x3C000) >> 14 = 13
-	 */
-	if (VMM_OK != (err = vmm_devtree_regaddr(dev->node, &paddr, 0))) {
-		goto out_bgio;
-	}
-	port_num = ((paddr & 0x3C000) >> 14) - 6;
 	port->bgc.gc.base = (port_num - 1) * 32;
 
 	err = gpiochip_add(&port->bgc.gc);
 	if (err)
 		goto out_bgpio_remove;
 
-	/* irq_base = irq_alloc_descs(-1, 0, 32, numa_node_id()); */
-	/* if (irq_base < 0) { */
-	/* 	err = irq_base; */
-	/* 	goto out_gpiochip_remove; */
-	/* } */
-
 	/* gpio-mxc can be a generic irq chip */
-	err = mxc_gpio_init_gc(port, port->irq, port_num, 32, dev);
+	err = mxc_gpio_init_gc(port, port->irq, name, 32, dev);
 	if (err)
 		goto out_gpiochip_remove;
 
 	list_add_tail(&port->node, &mxc_gpio_ports);
+	dev_info(dev, "%s registered\n", name);
 
 	return err;
 
