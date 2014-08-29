@@ -244,7 +244,7 @@ struct mmc_data {
 struct mmc_request {
 	struct mmc_cmd		*sbc;		/* SET_BLOCK_COUNT for multiblock */
 	struct mmc_cmd		*cmd;
-	struct mmc_data		*data;
+	/* struct mmc_data		*data; */
 	struct mmc_cmd		*stop;
 
 	struct vmm_completion	completion;

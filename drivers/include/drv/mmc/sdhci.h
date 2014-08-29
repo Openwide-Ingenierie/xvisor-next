@@ -386,7 +386,7 @@ struct sdhci_host {
 	u32 sdhci_version;
 	u32 sdhci_caps;
 
-	struct mmc_request *mrq; /* associated request */
+	/* struct mmc_request *mrq; /\* associated request *\/ */
 	struct mmc_cmd *cmd;	/* Current command */
 
 	void *aligned_buffer; /* Used when DMA address has to be 8-byte aligned */
