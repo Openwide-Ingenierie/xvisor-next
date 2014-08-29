@@ -98,6 +98,10 @@
 #define SD_CMD_APP_SEND_OP_COND		41
 #define SD_CMD_APP_SEND_SCR		51
 
+/* class 2 */
+#define MMC_CMD_TUNING_BLOCK		19   /* adtc R1  */
+#define MMC_CMD_TUNING_BLOCK_HS200	21   /* adtc R1  */
+
 /* SCR definitions in different words */
 #define SD_HIGHSPEED_BUSY		0x00020000
 #define SD_HIGHSPEED_SUPPORTED		0x00020000
