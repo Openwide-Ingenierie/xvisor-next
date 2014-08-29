@@ -29,7 +29,7 @@
 #include <arch_cpu_irq.h>
 #include <arch_host_irq.h>
 #include <libs/stringlib.h>
-#include <vmm_host_extended_irq.h>
+#include <vmm_host_extirq.h>
 
 struct vmm_host_irqs_ctrl {
 	vmm_spinlock_t lock;
