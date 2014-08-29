@@ -347,6 +347,8 @@ struct sdhci_ops {
 	void (*set_control_reg)(struct sdhci_host *host);
 	void (*set_clock)(struct sdhci_host *host, unsigned int div);
 	unsigned int	(*get_wp)(struct sdhci_host *host);
+	int     (*platform_execute_tuning)(struct sdhci_host *host,
+					   u32 opcode);
 };
 
 struct sdhci_host {
@@ -359,6 +361,22 @@ struct sdhci_host {
 	u32 quirks; /* quirks or hacks */
 	u32 quirks2; /* quirks or hacks */
 	u32 caps; /* forced mmc_host capablities */
+
+	int flags;		/* Host attributes */
+#define SDHCI_USE_SDMA		(1<<0)	/* Host is SDMA capable */
+#define SDHCI_USE_ADMA		(1<<1)	/* Host is ADMA capable */
+#define SDHCI_REQ_USE_DMA	(1<<2)	/* Use DMA for this req. */
+#define SDHCI_DEVICE_DEAD	(1<<3)	/* Device unresponsive */
+#define SDHCI_SDR50_NEEDS_TUNING (1<<4)	/* SDR50 needs tuning */
+#define SDHCI_NEEDS_RETUNING	(1<<5)	/* Host needs retuning */
+#define SDHCI_AUTO_CMD12	(1<<6)	/* Auto CMD12 support */
+#define SDHCI_AUTO_CMD23	(1<<7)	/* Auto CMD23 support */
+#define SDHCI_PV_ENABLED	(1<<8)	/* Preset value enabled */
+#define SDHCI_SDIO_IRQ_ENABLED	(1<<9)	/* SDIO irq enabled */
+#define SDHCI_SDR104_NEEDS_TUNING (1<<10)	/* SDR104/HS200 needs tuning */
+#define SDHCI_USING_RETUNING_TIMER (1<<11)	/* Host is using a retuning */
+						/* timer for the card */
+
 	u32 clock; /* input clock */
 	u32 max_clk; /* max output clock */
 	u32 min_clk; /* min output clock */

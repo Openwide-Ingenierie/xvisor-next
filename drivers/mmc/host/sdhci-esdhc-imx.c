@@ -45,6 +45,8 @@
 #define	MODULE_INIT			sdhci_esdhc_imx_init
 #define	MODULE_EXIT			sdhci_esdhc_imx_exit
 
+#define ESDHC_PRESENT_RTR		(1 << 12)
+
 #define	ESDHC_CTRL_D3CD			0x08
 /* VENDOR SPEC register */
 #define ESDHC_VENDOR_SPEC		0xc0
@@ -666,6 +668,7 @@ static int esdhc_pltfm_bus_width(struct sdhci_host *host, int width)
 
 	return 0;
 }
+#endif /* 0 */
 
 static void esdhc_prepare_tuning(struct sdhci_host *host, u32 val)
 {
@@ -684,10 +687,9 @@ static void esdhc_prepare_tuning(struct sdhci_host *host, u32 val)
 			val, readl(host->ioaddr + ESDHC_TUNE_CTRL_STATUS));
 }
 
-static void esdhc_request_done(struct mmc_request *mrq)
-{
-	complete(&mrq->completion);
-}
+int sdhci_do_send_command(struct sdhci_host *host,
+			  struct mmc_cmd *cmd,
+			  struct mmc_data *data);
 
 static int esdhc_send_tuning_cmd(struct sdhci_host *host, u32 opcode)
 {
@@ -710,25 +712,7 @@ static int esdhc_send_tuning_cmd(struct sdhci_host *host, u32 opcode)
 
 	sg_init_one(&sg, tuning_pattern, sizeof(tuning_pattern));
 
-	mrq.cmd = &cmd;
-	mrq.cmd->mrq = &mrq;
-	mrq.data = &data;
-	mrq.data->mrq = &mrq;
-	mrq.cmd->data = mrq.data;
-
-	mrq.done = esdhc_request_done;
-	init_completion(&(mrq.completion));
-
-	disable_irq(host->irq);
-	spin_lock(&host->lock);
-	host->mrq = &mrq;
-
-	sdhci_send_command(host->mmc, mrq.cmd, mrq.data);
-
-	spin_unlock(&host->lock);
-	enable_irq(host->irq);
-
-	wait_for_completion(&mrq.completion);
+	sdhci_do_send_command(host, &cmd, &data);
 
 	if (cmd.error)
 		return cmd.error;
@@ -750,6 +734,9 @@ static void esdhc_post_tuning(struct sdhci_host *host)
 static int esdhc_executing_tuning(struct sdhci_host *host, u32 opcode)
 {
 	int min, max, avg, ret;
+
+	if (!(sdhci_readl(host, SDHCI_PRESENT_STATE) & ESDHC_PRESENT_RTR))
+		return VMM_OK;
 
 	/* find the mininum delay first which can pass tuning */
 	min = ESDHC_TUNE_CTRL_MIN;
@@ -783,6 +770,7 @@ static int esdhc_executing_tuning(struct sdhci_host *host, u32 opcode)
 	return ret;
 }
 
+#if 0
 static int esdhc_change_pinstate(struct sdhci_host *host,
 						unsigned int uhs)
 {
@@ -1001,9 +989,8 @@ static int sdhci_esdhc_imx_probe(struct vmm_device *dev,
 	}
 
 	if (imx_data->socdata->flags & ESDHC_FLAG_MAN_TUNING) {
-		dev_warn(dev, "Manual tuning not implemented yet\n");
-		/* sdhci_esdhc_ops.platform_execute_tuning = */
-		/* 			esdhc_executing_tuning; */
+		host->ops.platform_execute_tuning =
+					esdhc_executing_tuning;
 	}
 
 	boarddata = &imx_data->boarddata;
@@ -1059,6 +1046,8 @@ static int sdhci_esdhc_imx_probe(struct vmm_device *dev,
 		host->quirks |= SDHCI_QUIRK_FORCE_1_BIT_DATA;
 		break;
 	}
+
+	host->flags |= SDHCI_NEEDS_RETUNING;
 
 	/* sdr50 and sdr104 needs work on 1.8v signal voltage */
 	if ((boarddata->support_vsel) && esdhc_is_usdhc(imx_data)) {

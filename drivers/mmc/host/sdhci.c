@@ -6,6 +6,7 @@
  * All rights reserved.
  * Modified by Jimmy Durand Wesolowski to add the card detection and write
  * protect checking support from a pin or the SDHCI controller register.
+ * Modified by Jimmy Durand Wesolowski to add tuning command execution.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,6 +57,10 @@
 #define MODULE_IPRIORITY		(SDHCI_IPRIORITY)
 #define	MODULE_INIT			sdhci_module_init
 #define	MODULE_EXIT			sdhci_module_exit
+
+#define MAX_TUNING_LOOP			40
+
+static int sdhci_get_cd(struct mmc_host *mmc);
 
 static void sdhci_clear_set_irqs(struct sdhci_host *host, u32 clear, u32 set)
 {
@@ -242,50 +247,15 @@ static int sdhci_transfer_data(struct sdhci_host *host,
 	return VMM_OK;
 }
 
-int sdhci_send_command(struct mmc_host *mmc,
-			struct mmc_cmd *cmd, 
-			struct mmc_data *data)
+int sdhci_do_send_command(struct sdhci_host *host,
+			  struct mmc_cmd *cmd,
+			  struct mmc_data *data)
 {
-	bool present;
-	u32 mask, flags, mode;
+	u32 mask = 0;
+	u32 flags = 0, mode = 0;
+	u32 stat = 0;
 	int ret = 0, trans_bytes = 0, is_aligned = 1;
-	u32 timeout, retry = 10000, stat = 0, start_addr = 0;
-	struct sdhci_host *host = mmc_priv(mmc);
-
-	/* If polling, assume that the card is always present. */
-	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) {
-		present = TRUE;
-	} else {
-		present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
-				SDHCI_CARD_PRESENT;
-	}
-
-	/* If card not present then return error */
-	if (!present) {
-		return VMM_EIO;
-	}
-
-	/* Wait max 10 ms */
-	timeout = 10;
-
-	sdhci_writel(host, SDHCI_INT_ALL_MASK, SDHCI_INT_STATUS);
-	mask = SDHCI_CMD_INHIBIT | SDHCI_DATA_INHIBIT;
-
-	/* We shouldn't wait for data inihibit for stop commands, even
-	   though they might use busy signaling */
-	if (cmd->cmdidx == MMC_CMD_STOP_TRANSMISSION) {
-		mask &= ~SDHCI_DATA_INHIBIT;
-	}
-
-	while (sdhci_readl(host, SDHCI_PRESENT_STATE) & mask) {
-		if (timeout == 0) {
-			vmm_printf("%s: Controller never released "
-				   "inhibit bit(s).\n", __func__);
-			return VMM_EIO;
-		}
-		timeout--;
-		vmm_udelay(1000);
-	}
+	u32 retry = 20000, start_addr = 0;
 
 	mask = SDHCI_INT_RESPONSE;
 	if (!(cmd->resp_type & MMC_RSP_PRESENT)) {
@@ -408,6 +378,71 @@ int sdhci_send_command(struct mmc_host *mmc,
 	} else {
 		return VMM_EIO;
 	}
+}
+
+static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
+{
+	struct sdhci_host *host;
+
+	host = mmc_priv(mmc);
+
+	if (host->ops.platform_execute_tuning) {
+		return host->ops.platform_execute_tuning(host, opcode);
+	}
+	return VMM_ENOTAVAIL;
+}
+
+int sdhci_send_command(struct mmc_host *mmc,
+			struct mmc_cmd *cmd,
+			struct mmc_data *data)
+{
+	u32 mask = 0;
+	u32 timeout, stat = 0;
+	u32 state = 0;
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	/* If card not present then return error */
+	if (!sdhci_get_cd(mmc)) {
+		return VMM_EIO;
+	}
+
+	/* Wait max 10 ms */
+	timeout = 10;
+
+	sdhci_writel(host, SDHCI_INT_ALL_MASK, SDHCI_INT_STATUS);
+	mask = SDHCI_CMD_INHIBIT | SDHCI_DATA_INHIBIT;
+
+	/* We shouldn't wait for data inihibit for stop commands, even
+	   though they might use busy signaling */
+	if (cmd->cmdidx == MMC_CMD_STOP_TRANSMISSION) {
+		mask &= ~SDHCI_DATA_INHIBIT;
+	}
+
+	state = sdhci_readl(host, SDHCI_PRESENT_STATE);
+	while (stat & mask) {
+		if (timeout == 0) {
+			vmm_printf("%s: Controller never released "
+				   "inhibit bit(s).\n", __func__);
+			return VMM_EIO;
+		}
+		timeout--;
+		vmm_udelay(1000);
+	}
+
+	if ((host->flags & SDHCI_NEEDS_RETUNING) &&
+	    !(state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) &&
+	    NULL != mmc->card) {
+		int err = VMM_OK;
+
+		if (mmc->card->version & MMC_VERSION_MMC)
+			err = sdhci_execute_tuning(mmc, MMC_CMD_TUNING_BLOCK_HS200);
+		else
+			err = sdhci_execute_tuning(mmc, MMC_CMD_TUNING_BLOCK);
+		if (VMM_OK != err)
+			vmm_printf("%s: Tuning failed\n", __func__);
+	}
+
+	return sdhci_do_send_command(host, cmd, data);
 }
 
 static int sdhci_set_clock(struct mmc_host *mmc, u32 clock)
