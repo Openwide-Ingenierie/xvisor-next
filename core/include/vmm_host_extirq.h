@@ -96,6 +96,8 @@ int vmm_host_extirq_create_mapping(struct vmm_host_extirq_group *group,
 
 void vmm_host_extirq_dispose_mapping(unsigned int irq_num);
 
+void vmm_host_extirq_debug_dump(void);
+
 /**
  * vmm_host_extirq_add() - Allocate and register a new extended IRQ group.
  * @of_node: pointer to interrupt controller's device tree node.
