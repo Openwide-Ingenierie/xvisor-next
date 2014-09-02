@@ -46,8 +46,8 @@
 #define __symtbl		__section(".symtbl")
 #define __percpu		__section(".percpu")
 #define __init			__section(".init.text")
-#define __initconst		__section(".init.data")
-#define __initdata		__section(".init.data")
+#define __initconst		__section(".initdata")
+#define __initdata		__section(".initdata")
 #define __exit
 
 #if defined(CONFIG_SMP)

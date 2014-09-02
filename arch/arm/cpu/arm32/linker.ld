@@ -25,71 +25,36 @@ OUTPUT_FORMAT("elf32-littlearm", "elf32-littlearm", "elf32-littlearm")
 OUTPUT_ARCH("arm")
 ENTRY(_start_vect)
 
-SECTIONS 
+SECTIONS
 {
 	. = CPU_TEXT_START;
 
 	. = ALIGN(0x1000); /* Need this to create proper pages */
-	
+
 	PROVIDE(_code_start = .);
 
+	/* Beginning of the code section */
 	.text :
  	{
+		. = ALIGN(4);
 		PROVIDE(_text_start = .);
 		*(.entry)
 		*(.text)
-		. = ALIGN(4);
 		PROVIDE(_text_end = .);
 	}
 
-	.data :
-	{
-		PROVIDE(_data_start = .);
-		*(.data)
-		. = ALIGN(4);
-		PROVIDE(_data_end = .);
-	}
-
-	.rodata :
-	{
-		PROVIDE(_rodata_start = .);
-		*(.rodata .rodata.*)
-		. = ALIGN(4);
-		PROVIDE(_rodata_end = .);
-	}
-
-	.percpu :
-	{
-		PROVIDE(_percpu_start = .);
-		*(.percpu)
-		. = ALIGN(4);
-		PROVIDE(_percpu_end = .);
-	}
-
-	. = ALIGN(0x1000); /* init section is page aligned */
-
-	.init : 
+	.init :
 	{
 		PROVIDE(_init_start = .);
 
+		. = ALIGN(4);
 		*(.init.*)
-		. = ALIGN(4);
 
-		PROVIDE(_modtbl_start = .);
-		*(.modtbl)
-		. = ALIGN(4);
-		PROVIDE(_modtbl_end = .);
-
-		PROVIDE(_nidtbl_start = .);
-		*(.nidtbl)
-		. = ALIGN(4);
-		PROVIDE(_nidtbl_end = .);
-
-		. = ALIGN(4);
 		PROVIDE(__setup_start = .);
 		*(.setup.init);
 		PROVIDE(__setup_end = .);
 
+		/* This may be moved to a RW section */
 		. = ALIGN(CONFIG_ARM_MAX_DTB_SIZE);
 		*(.devtree)
 		. = ALIGN(CONFIG_ARM_MAX_DTB_SIZE);
@@ -97,13 +62,76 @@ SECTIONS
 		PROVIDE(_init_end = .);
 	}
 
-	. = ALIGN(0x1000); /* bss is page aligned */
+	.cpuinit :
+	{
+		. = ALIGN(4);
+		PROVIDE(_cpuinit_start = .);
+		*(.cpuinit.*)
+		PROVIDE(_cpuinit_end = .);
+	}
+
+	.spinlock :
+	{
+		. = ALIGN(4);
+		PROVIDE(_spinlock_start = .);
+		*(.spinlock.*)
+		PROVIDE(_spinlock_end = .);
+	}
+
+	/* End of the code section */
+	/* Beginning of the RO data section */
+
+	.rodata :
+	{
+		PROVIDE(_rodata_start = .);
+		. = ALIGN(4);
+		*(.symtbl)
+		*(.rodata .rodata.*)
+		PROVIDE(_rodata_end = .);
+	}
+
+	/* End of the RO data section */
+	/* Beginning of the RW data section */
+	. = ALIGN(0x1000); /* Need this to create proper pages */
+
+	.initdata :
+	{
+		PROVIDE(_initdata_start = .);
+		*(.initdata);
+		PROVIDE(_initdata_end = .);
+	}
+
+	.percpu :
+	{
+		PROVIDE(_percpu_start = .);
+		. = ALIGN(4);
+		*(.percpu)
+		PROVIDE(_percpu_end = .);
+	}
+
+	.data :
+	{
+		PROVIDE(_data_start = .);
+		*(.data)
+
+		PROVIDE(_modtbl_start = .);
+		. = ALIGN(4);
+		*(.modtbl)
+		PROVIDE(_modtbl_end = .);
+
+		PROVIDE(_nidtbl_start = .);
+		. = ALIGN(4);
+		*(.nidtbl)
+		PROVIDE(_nidtbl_end = .);
+
+		PROVIDE(_data_end = .);
+	}
 
 	.bss :
 	{
 		PROVIDE(_bss_start = .);
 		*(.bss)
-		. = ALIGN(4);
+		*(COMMON)
 		PROVIDE(_bss_end = .);
 	}
 
@@ -148,8 +176,6 @@ SECTIONS
 		. = ALIGN(4);
 		PROVIDE(_fiq_stack_end = .);
 	}
-
 	. = ALIGN(0x1000); /* Need this to create proper pages */
-	
 	PROVIDE(_code_end = .);
 }
