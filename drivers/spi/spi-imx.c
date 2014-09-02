@@ -710,6 +710,7 @@ static int spi_imx_transfer(struct spi_device *spi,
 			    struct spi_transfer *transfer)
 {
 	struct spi_imx_data *spi_imx = spi_master_get_devdata(spi->master);
+	u64 timeout = 100;
 
 	spi_imx->tx_buf = transfer->tx_buf;
 	spi_imx->rx_buf = transfer->rx_buf;
@@ -718,11 +719,15 @@ static int spi_imx_transfer(struct spi_device *spi,
 
 	init_completion(&spi_imx->xfer_done);
 
-	spi_imx->devtype_data->intctrl(spi_imx, MXC_INT_TE);
-
 	spi_imx_push(spi_imx);
 
-	wait_for_completion(&spi_imx->xfer_done);
+	spi_imx->devtype_data->intctrl(spi_imx, MXC_INT_TE);
+
+	vmm_completion_wait_timeout(&spi_imx->xfer_done, &timeout);
+	if (!timeout) {
+		spi_imx->devtype_data->intctrl(spi_imx, MXC_INT_TE);
+		vmm_completion_wait(&spi_imx->xfer_done);
+	}
 
 	return transfer->len;
 }
