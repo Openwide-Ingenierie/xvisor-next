@@ -448,6 +448,11 @@ int __cpuinit arch_cpu_irq_setup(void)
 		vectors_data[vec] = _start_vect[vec + CPU_IRQ_NR];
 	}
 
+	vec_page.ap = TTBL_AP_SR_U;
+	if ((rc = cpu_mmu_update_reserved_page(&vec_page))) {
+		return rc;
+	}
+
 	return VMM_OK;
 }
 

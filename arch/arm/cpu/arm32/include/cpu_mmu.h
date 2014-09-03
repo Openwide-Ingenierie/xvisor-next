@@ -95,6 +95,9 @@ int cpu_mmu_unmap_reserved_page(struct cpu_page *pg);
 /** Map a reserved page */
 int cpu_mmu_map_reserved_page(struct cpu_page *pg);
 
+/** Update a page */
+int cpu_mmu_update_reserved_page(struct cpu_page *pg);
+
 /** Allocate a L1 table */
 struct cpu_l1tbl *cpu_mmu_l1tbl_alloc(void);
 
