@@ -827,7 +827,8 @@ int sdhci_add_host(struct sdhci_host *host)
 		host->sdhci_version = sdhci_readw(host, SDHCI_HOST_VERSION);
 	}
 
-	host->sdhci_caps = sdhci_readl(host, SDHCI_CAPABILITIES);
+	host->sdhci_caps = sdhci_readl(host, SDHCI_CAPABILITIES) &
+		~SDHCI_CAN_DO_SDMA;
 
 	mmc->ops.send_cmd = sdhci_send_command;
 	mmc->ops.set_ios = sdhci_set_ios;
