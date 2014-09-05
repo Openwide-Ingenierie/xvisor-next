@@ -602,8 +602,8 @@ static inline void esdhc_pltfm_set_clock(struct sdhci_host *host,
 		div++;
 
 	host->clock = udiv32(host_clock, pre_div * div);
-	dev_dbg(dev, "desired SD clock: %d, actual: %d\n",
-		clock, host->mmc->actual_clock);
+	dev_info(host->mmc->dev, "desired SD clock: %d, actual: %d\n",
+		 clock, host->clock);
 
 	if (imx_data->is_ddr)
 		pre_div >>= 2;
@@ -845,16 +845,18 @@ static int
 sdhci_esdhc_imx_probe_dt(struct vmm_devtree_node *np,
 			 struct esdhc_platform_data *boarddata)
 {
+	int len = 0;
+
 	if (!np)
 		return -ENODEV;
 
-	if (of_get_property(np, "non-removable", NULL))
+	if (of_get_property(np, "non-removable", &len))
 		boarddata->cd_type = ESDHC_CD_PERMANENT;
 
-	if (of_get_property(np, "fsl,cd-controller", NULL))
+	if (of_get_property(np, "fsl,cd-controller", &len))
 		boarddata->cd_type = ESDHC_CD_CONTROLLER;
 
-	if (of_get_property(np, "fsl,wp-controller", NULL))
+	if (of_get_property(np, "fsl,wp-controller", &len))
 		boarddata->wp_type = ESDHC_WP_CONTROLLER;
 
 	boarddata->cd_gpio = of_get_named_gpio(np, "cd-gpios", 0);
@@ -869,7 +871,7 @@ sdhci_esdhc_imx_probe_dt(struct vmm_devtree_node *np,
 
 	of_property_read_u32(np, "max-frequency", &boarddata->f_max);
 
-	if (of_find_property(np, "no-1-8-v", NULL))
+	if (of_find_property(np, "no-1-8-v", &len))
 		boarddata->support_vsel = false;
 	else
 		boarddata->support_vsel = true;
