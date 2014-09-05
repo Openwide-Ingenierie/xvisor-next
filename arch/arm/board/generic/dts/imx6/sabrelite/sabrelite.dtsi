@@ -63,11 +63,11 @@
 	status = "okay";
 };
 
-&usdhc4 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usdhc4_2>;
-	cd-gpios = <&gpio2 6 0>;
-	wp-gpios = <&gpio2 7 0>;
-	/* vmmc-supply = <&reg_3p3v>; */
-	status = "okay";
-};
+/* &usdhc4 { */
+/* 	pinctrl-names = "default"; */
+/* 	pinctrl-0 = <&pinctrl_usdhc4_2>; */
+/* 	cd-gpios = <&gpio2 6 0>; */
+/* 	wp-gpios = <&gpio2 7 0>; */
+/* 	/\* vmmc-supply = <&reg_3p3v>; *\/ */
+/* 	status = "okay"; */
+/* }; */
