@@ -168,9 +168,9 @@ void imx_lowlevel_init(virtual_addr_t base, u32 baudrate, u32 input_clock)
 
 	/* trigger interrupt when there is 1 by in the RXFIFO */
 	temp = vmm_readl((void *)(base + UFCR));
-#if defined(CONFIG_UART_IMX_USE_TXINTR)
+/* #if defined(CONFIG_UART_IMX_USE_TXINTR) */
 	temp = (temp & 0x03FF) | (TXFIFO_THRESHOLD << UFCR_TXTL_SHF);
-#endif /* CONFIG_UART_IMX_USE_TXINTR */
+/* #endif /\* CONFIG_UART_IMX_USE_TXINTR *\/ */
 	vmm_writel((temp & 0xFFC0) | 1, (void *)(base + UFCR));
 
 	/* Divide input clock by 2 */
