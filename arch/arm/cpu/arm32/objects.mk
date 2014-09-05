@@ -39,11 +39,11 @@ tune-y	=
 
 # Need -Uarm for gcc < 3.x
 cpu-cppflags+=-DCPU_TEXT_START=0xFF000000
-cpu-cflags += -msoft-float -marm -Uarm $(arch-y) $(tune-y)
+cpu-cflags += -msoft-float -marm -Uarm $(arch-y) $(tune-y) -O1
 ifeq ($(CONFIG_ARM32_STACKTRACE), y)
 cpu-cflags += -fno-omit-frame-pointer -mapcs -mno-sched-prolog
 endif
-cpu-asflags += -marm $(arch-y) $(tune-y)
+cpu-asflags += -marm $(arch-y) $(tune-y) -O1
 cpu-ldflags += -msoft-float
 
 cpu-objs-y += cpu_entry.o
