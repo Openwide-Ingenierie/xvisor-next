@@ -66,7 +66,7 @@ bool vmm_isprintable(char c)
 
 int vmm_printchars(struct vmm_chardev *cdev, char *ch, u32 num_ch, bool block)
 {
-	int i, rc;
+	int i, rc = VMM_OK;
 
 	if (!ch || !num_ch) {
 		return VMM_EFAIL;
@@ -427,7 +427,7 @@ void __noreturn __vmm_panic(const char *format, ...)
 
 int vmm_scanchars(struct vmm_chardev *cdev, char *ch, u32 num_ch, bool block)
 {
-	int i, rc;
+	int i, rc = VMM_OK;
 
 	if (!ch || !num_ch) {
 		return VMM_EFAIL;
@@ -478,7 +478,7 @@ char *vmm_cgets(struct vmm_chardev *cdev, char *s, int maxwidth,
 	char ch, ch1;
 	bool add_ch, del_ch, to_left, to_right, to_start, to_end;
 	u32 ite, pos = 0, count = 0;
-	int prev, hist_cur;
+	int prev, hist_cur = 0;
 	if (!s) {
 		return NULL;
 	}
