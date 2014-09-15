@@ -74,7 +74,8 @@ static inline unsigned int irq_of_parse_and_map(struct device_node *dev,
 static inline const void *of_get_property(const struct device_node *np,
 					  const char *name, int *lenp)
 {
-	*lenp = vmm_devtree_attrlen(np, name);
+	if (lenp)
+		*lenp = vmm_devtree_attrlen(np, name);
 
 	return vmm_devtree_attrval(np, name);
 }
@@ -86,7 +87,7 @@ static inline struct property *of_find_property(const struct device_node *np,
 
 	pp = vmm_devtree_getattr(np, name);
 
-	if (pp)
+	if (pp && lenp)
 		*lenp = pp->len;
 
 	return pp;
