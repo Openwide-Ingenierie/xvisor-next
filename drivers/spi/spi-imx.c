@@ -803,10 +803,10 @@ static int spi_imx_probe(struct vmm_device *dev,
 	struct spi_master *master;
 	struct spi_imx_data *spi_imx;
 	int i;
-	int ret;
+	int ret = VMM_OK;
 	u32 num_cs;
 
-	if (VMM_OK != (ret = vmm_devtree_status_get(dev->node))) {
+	if (!vmm_devtree_is_available(dev->node)) {
 		dev_info(dev, "device is disabled\n");
 		return ret;
 	}
