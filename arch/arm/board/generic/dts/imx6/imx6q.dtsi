@@ -326,6 +326,13 @@
 					};
 				};
 
+				pwm4 {
+					pinctrl_pwm4: pwm4grp {
+						fsl,pins = <
+							MX6QDL_PAD_SD1_CMD__PWM4_OUT 0x1b0b1
+						>;
+					};
+				};
 			};
 
 			spba-bus@02000000 {
@@ -417,6 +424,15 @@
 			/* 	bus-width = <4>; */
 			/* 	status = "disabled"; */
 			/* }; */
+
+			pwm4: pwm@0208c000 {
+				#pwm-cells = <2>;
+				compatible = "fsl,imx6q-pwm", "fsl,imx27-pwm";
+				reg = <0x0208c000 0x4000>;
+				interrupts = <0 86 0x04>;
+				clocks = <&clks 62>, <&clks 148>;
+				clock-names = "ipg", "per";
+			};
 
 		};
 
