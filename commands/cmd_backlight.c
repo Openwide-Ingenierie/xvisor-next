@@ -106,13 +106,25 @@ static int cmd_backlight_brightness(struct vmm_chardev *cdev,
 		return VMM_OK;
 	}
 
-	if (argc >= 4) {
-		brightness = strtol(argv[3], NULL, 10);
-		bd->props.brightness = brightness;
-		bd->ops->update_status(bd);
-	}
+	if (argc < 4)
+		return VMM_OK;
 
-	return 0;
+	brightness = strtol(argv[3], NULL, 10);
+	if (brightness > bd->props.max_brightness) {
+		vmm_cprintf(cdev, "Warning: Setting \"%s\" to maximum "
+			    "value (%d)\n", bd->dev.name,
+			    bd->props.max_brightness);
+		brightness = bd->props.max_brightness;
+	}
+	if (brightness < 0) {
+		vmm_cprintf(cdev, "Warning: Setting \"%s\" off\n",
+			    bd->dev.name);
+		brightness = 0;
+	}
+	bd->props.brightness = brightness;
+	bd->ops->update_status(bd);
+
+	return VMM_OK;
 }
 
 static const struct {
