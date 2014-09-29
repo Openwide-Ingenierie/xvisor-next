@@ -11,6 +11,7 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/slab.h>
+#include <drv/gpio.h>
 
 /* Optional implementation infrastructure for GPIO interfaces.
  *
@@ -43,29 +44,6 @@
  */
 static DEFINE_SPINLOCK(gpio_lock);
 
-struct gpio_desc {
-	struct gpio_chip	*chip;
-	unsigned long		flags;
-/* flag symbols are bit numbers */
-#define FLAG_REQUESTED	0
-#define FLAG_IS_OUT	1
-#define FLAG_EXPORT	2	/* protected by sysfs_lock */
-#define FLAG_SYSFS	3	/* exported via /sys/class/gpio/control */
-#define FLAG_TRIG_FALL	4	/* trigger on falling edge */
-#define FLAG_TRIG_RISE	5	/* trigger on rising edge */
-#define FLAG_ACTIVE_LOW	6	/* sysfs value has active low */
-#define FLAG_OPEN_DRAIN	7	/* Gpio is open drain type */
-#define FLAG_OPEN_SOURCE 8	/* Gpio is open source type */
-
-#define ID_SHIFT	16	/* add new flags before this one */
-
-#define GPIO_FLAGS_MASK		((1 << ID_SHIFT) - 1)
-#define GPIO_TRIGGER_MASK	(BIT(FLAG_TRIG_FALL) | BIT(FLAG_TRIG_RISE))
-
-#ifdef CONFIG_DEBUG_FS
-	const char		*label;
-#endif
-};
 static struct gpio_desc gpio_desc[ARCH_NR_GPIOS];
 
 #define GPIO_OFFSET_VALID(chip, offset) (offset >= 0 && offset < chip->ngpio)
@@ -88,8 +66,6 @@ static int gpiod_get_direction(const struct gpio_desc *desc);
 static int gpiod_set_debounce(struct gpio_desc *desc, unsigned debounce);
 static int gpiod_get_value_cansleep(const struct gpio_desc *desc);
 static void gpiod_set_value_cansleep(struct gpio_desc *desc, int value);
-static int gpiod_get_value(const struct gpio_desc *desc);
-static void gpiod_set_value(struct gpio_desc *desc, int value);
 static int gpiod_cansleep(const struct gpio_desc *desc);
 static int gpiod_to_irq(const struct gpio_desc *desc);
 static int gpiod_export(struct gpio_desc *desc, bool direction_may_change);
@@ -1849,7 +1825,7 @@ EXPORT_SYMBOL_GPL(gpio_set_debounce);
  * It returns the zero or nonzero value provided by the associated
  * gpio_chip.get() method; or zero if no such method is provided.
  */
-static int gpiod_get_value(const struct gpio_desc *desc)
+int gpiod_get_value(const struct gpio_desc *desc)
 {
 	struct gpio_chip	*chip;
 	int value;
@@ -1941,7 +1917,7 @@ static void _gpio_set_open_source_value(struct gpio_desc *desc, int value)
  * This is used directly or indirectly to implement gpio_set_value().
  * It invokes the associated gpio_chip.set() method.
  */
-static void gpiod_set_value(struct gpio_desc *desc, int value)
+void gpiod_set_value(struct gpio_desc *desc, int value)
 {
 	struct gpio_chip	*chip;
 
