@@ -107,9 +107,10 @@
 		#size-cells = <1>;
 		compatible = "simple-bus";
 
-		ocram {
+		ocram: sram@0x00900000 {
 			compatible = "mmio-sram";
-			reg = <0x00900000 0x40000>;
+			reg = <0x00904000 0x3C000>;
+			clocks = <&clks 142>;
 		};
 
 		aips-bus@02000000 { /* AIPS1 */
