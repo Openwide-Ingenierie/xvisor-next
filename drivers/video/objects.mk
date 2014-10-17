@@ -46,6 +46,6 @@ fb-$(CONFIG_FB_SYS_IMAGEBLIT) += sysimgblt.o
 
 drivers-objs-$(CONFIG_FB_ARMCLCD)+= video/amba-clcd.o
 drivers-objs-$(CONFIG_FB_VESA)+= video/vesafb.o
-
+drivers-objs-$(CONFIG_MXC_LDB) += video/mxc_ldb.o
 drivers-objs-$(CONFIG_BACKLIGHT) += video/backlight/backlight.o
 drivers-objs-$(CONFIG_BACKLIGHT_PWM) += video/backlight/pwm_bl.o
