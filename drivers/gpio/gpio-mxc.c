@@ -592,6 +592,7 @@ static int mxc_gpio_probe(struct vmm_device *dev,
 
 	list_add_tail(&port->node, &mxc_gpio_ports);
 	dev_info(dev, "%s registered\n", name);
+	vmm_free(name);
 
 	return err;
 
