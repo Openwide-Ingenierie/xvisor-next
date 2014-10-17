@@ -114,6 +114,8 @@ SECTIONS
 		PROVIDE(_data_start = .);
 		*(.data)
 
+		*(*.data)
+
 		PROVIDE(_modtbl_start = .);
 		. = ALIGN(4);
 		*(.modtbl)
