@@ -251,7 +251,7 @@ static unsigned long clk_pllv3_av_recalc_rate(struct clk_hw *hw,
 	u32 mfd = readl_relaxed(pll->base + PLL_DENOM_OFFSET);
 	u32 div = readl_relaxed(pll->base) & pll->div_mask;
 
-	return (parent_rate * div) + (do_div(parent_rate, mfd) * mfn);
+	return parent_rate * div + (do_div(parent_rate, mfd) * mfn);
 }
 
 static long clk_pllv3_av_round_rate(struct clk_hw *hw, unsigned long rate,
@@ -272,10 +272,10 @@ static long clk_pllv3_av_round_rate(struct clk_hw *hw, unsigned long rate,
 	div = do_div(rate, parent_rate);
 	temp64 = (u64) (rate - div * parent_rate);
 	temp64 *= mfd;
-	do_div(temp64, parent_rate);
+	temp64 = do_div(temp64, parent_rate);
 	mfn = temp64;
 
-	return do_div(parent_rate * div + parent_rate, mfd * mfn);
+	return parent_rate * div + do_div(parent_rate, mfd) * mfn;
 }
 
 static int clk_pllv3_av_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -294,7 +294,7 @@ static int clk_pllv3_av_set_rate(struct clk_hw *hw, unsigned long rate,
 	div = do_div(rate, parent_rate);
 	temp64 = (u64) (rate - div * parent_rate);
 	temp64 *= mfd;
-	do_div(temp64, parent_rate);
+	temp64 = do_div(temp64, parent_rate);
 	mfn = temp64;
 
 	val = readl_relaxed(pll->base);

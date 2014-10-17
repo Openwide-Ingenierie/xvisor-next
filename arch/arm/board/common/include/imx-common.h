@@ -49,7 +49,7 @@
 #define __raw_readl	readl
 #define __raw_writel	writel
 
-#define do_div		sdiv64
+#define do_div		udiv64
 
 
 void mxc_timer_init(void __iomem *, int);
