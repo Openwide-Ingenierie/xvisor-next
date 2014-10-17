@@ -22,10 +22,10 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/ipu-v3.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <video/ipu-v3.h>
 
 #include "ipu_prv.h"
 #include "ipu_regs.h"

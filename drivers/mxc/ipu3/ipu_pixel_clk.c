@@ -21,7 +21,7 @@
 #include <linux/clk-provider.h>
 #include <linux/err.h>
 #include <linux/io.h>
-#include <linux/ipu-v3.h>
+#include <video/ipu-v3.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/string.h>

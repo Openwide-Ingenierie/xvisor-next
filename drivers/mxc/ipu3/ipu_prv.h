@@ -25,7 +25,7 @@
 #include <vmm_host_irq.h>
 #include <vmm_host_io.h>
 #include <drv/clk.h>
-#include <linux/ipu-v3.h>
+#include <video/ipu-v3.h>
 
 #define MXC_IPU_MAX_NUM		2
 #define MXC_DI_NUM_PER_IPU	2

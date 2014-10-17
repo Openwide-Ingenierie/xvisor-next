@@ -26,4 +26,3 @@ drivers-objs-$(CONFIG_IPU_MXC) += mxc/ipu3/ipu_device.o
 drivers-objs-$(CONFIG_IPU_MXC) += mxc/ipu3/ipu_pixel_clk.o
 drivers-objs-$(CONFIG_IPU_MXC) += mxc/ipu3/ipu_ic.o
 drivers-objs-$(CONFIG_IPU_MXC) += mxc/ipu3/ipu_capture.o
-drivers-objs-$(CONFIG_IPU_MXC) += mxc/ipu3/vdoa.o
