@@ -26,8 +26,12 @@
 #include <vmm_devtree.h>
 #include <vmm_modules.h>
 #include <vmm_cmdmgr.h>
+#include <vmm_delay.h>
 #include <libs/stringlib.h>
 #include <drv/fb.h>
+
+#include "cmd_fb_logo.h"
+
 
 #define MODULE_DESC			"Command fb"
 #define MODULE_AUTHOR			"Anup Patel"
@@ -42,6 +46,10 @@ static void cmd_fb_usage(struct vmm_chardev *cdev)
 	vmm_cprintf(cdev, "   fb help\n");
 	vmm_cprintf(cdev, "   fb list\n");
 	vmm_cprintf(cdev, "   fb info <fb_name>\n");
+	vmm_cprintf(cdev, "   fb blank <fb_name> <value>\n");
+	vmm_cprintf(cdev, "   fb fillrect <fb_name> <x> <y> <w> <h> <c> "
+		    "[<rop>]\n");
+	vmm_cprintf(cdev, "   fb logo <fb_name> <x> <y> <w> <h>\n");
 }
 
 static void cmd_fb_list(struct vmm_chardev *cdev)
@@ -70,16 +78,9 @@ static void cmd_fb_list(struct vmm_chardev *cdev)
 			  "----------------------------------------\n");
 }
 
-static int cmd_fb_info(struct vmm_chardev *cdev, const char *fb_name)
+static int cmd_fb_info(struct vmm_chardev *cdev, struct fb_info *info)
 {
-	struct fb_info *info;
 	const char *str;
-
-	info = fb_find(fb_name);
-	if (!info) {
-		vmm_cprintf(cdev, "Error: Invalid FB %s\n", fb_name);
-		return VMM_EFAIL;
-	}
 
 	vmm_cprintf(cdev, "Name   : %s\n", info->name);
 	vmm_cprintf(cdev, "ID     : %s\n", info->fix.id);
@@ -138,8 +139,233 @@ static int cmd_fb_info(struct vmm_chardev *cdev, const char *fb_name)
 	return VMM_OK;
 }
 
+static void fb_dump_mode(struct vmm_chardev *cdev, struct fb_videomode *mode)
+{
+	vmm_cprintf(cdev, "  %s (refresh %d): %dx%d, pixclk %d\n"
+		    "    margins: %d %d %d %d\n"
+		    "    hsync %d, vsync %d, sync %d\n"
+		    "    vmode %d, flag %d\n",
+		    mode->name, mode->refresh, mode->xres, mode->yres,
+		    mode->pixclock, mode->left_margin, mode->right_margin,
+		    mode->upper_margin, mode->lower_margin, mode->hsync_len,
+		    mode->vsync_len, mode->sync, mode->vmode, mode->flag);
+}
+
+static int cmd_fb_fillrect(struct vmm_chardev *cdev, struct fb_info *info,
+			   int argc, char **argv)
+{
+	struct dlist *pos;
+	struct fb_modelist *modelist;
+	struct fb_fillrect rect;
+	const struct fb_videomode *hard_mode;
+	struct fb_var_screeninfo hard_var;
+
+	if (argc < 5) {
+		cmd_fb_usage(cdev);
+		return VMM_EFAIL;
+	}
+
+	memset(&rect, 0, sizeof (struct fb_fillrect));
+	rect.dx = strtol(argv[0], NULL, 10);
+	rect.dy = strtol(argv[1], NULL, 10);
+	rect.width = strtol(argv[2], NULL, 10);
+	rect.height = strtol(argv[3], NULL, 10);
+	rect.color = strtol(argv[4], NULL, 16);
+
+	if (rect.color >= (1 << info->var.bits_per_pixel)) {
+		vmm_cprintf(cdev, "Color error, %d bpp mode\n",
+			    info->var.bits_per_pixel);
+		return VMM_EFAIL;
+	}
+
+	if (argc > 5) {
+		rect.rop = strtol(argv[5], NULL, 10);
+	}
+
+	vmm_cprintf(cdev, "Current mode:\n");
+	fb_dump_mode(cdev, info->mode);
+	vmm_cprintf(cdev, "Modes:\n");
+
+	list_for_each(pos, &info->modelist) {
+		modelist = list_entry(pos, struct fb_modelist, list);
+		fb_dump_mode(cdev, &modelist->mode);
+	}
+
+	hard_var.bits_per_pixel = 24;
+	hard_var.xres = 1024;
+	hard_var.yres = 768;
+	hard_mode = fb_find_best_mode(&hard_var, &info->modelist);
+	if (!hard_mode) {
+		vmm_cprintf(cdev, "Failed to find mode\n");
+		return VMM_EFAIL;
+	}
+
+	vmm_cprintf(cdev, "Selected mode:\n");
+	fb_dump_mode(cdev, info->mode);
+
+	if (fb_check_var(info, &hard_var)) {
+		vmm_cprintf(cdev, "Checking var failed\n");
+		return VMM_EFAIL;
+	}
+
+	if (fb_set_var(info, &hard_var)) {
+		vmm_cprintf(cdev, "Failed setting var\n");
+		return VMM_EFAIL;
+	}
+
+	if (!info->fbops || !info->fbops->fb_fillrect) {
+		vmm_cprintf(cdev, "FB fillrect operation not defined\n");
+		return VMM_EFAIL;
+	}
+	vmm_cprintf(cdev, "X: %d, Y: %d, W: %d, H: %d, color: %d\n",
+		    rect.dx, rect.dy, rect.width, rect.height, rect.color);
+	info->fbops->fb_fillrect(info, &rect);
+
+	return VMM_OK;
+}
+
+typedef enum {
+	VSCREEN_COLOR_BLACK,
+	VSCREEN_COLOR_RED,
+	VSCREEN_COLOR_GREEN,
+	VSCREEN_COLOR_YELLOW,
+	VSCREEN_COLOR_BLUE,
+	VSCREEN_COLOR_MAGENTA,
+	VSCREEN_COLOR_CYAN,
+	VSCREEN_COLOR_WHITE,
+} vscreen_color;
+#define VSCREEN_DEFAULT_FC	VSCREEN_COLOR_WHITE
+#define VSCREEN_DEFAULT_BC	VSCREEN_COLOR_BLACK
+
+struct fb_bitfield logo[4] = {
+	{ 0, 8, 0}, { 8, 8, 0}, {16, 8, 0}, { 0, 0, 0}
+};
+
+/**
+ * Display images on the framebuffer.
+ * The image and the framebuffer must have the same color space and color map.
+ */
+static int fb_write_image(struct fb_info *info, const struct fb_image *image,
+			  unsigned int x, unsigned int y, unsigned int w,
+			  unsigned int h)
+{
+	const char *data = image->data;
+	char *screen = info->screen_base;
+	unsigned int img_stride = image->width * image->depth / 8;
+	unsigned int screen_stride = info->fix.line_length;
+
+	x *= image->depth / 8;
+
+	if (0 == w)
+		w = img_stride;
+	else
+		w *= image->depth / 8;
+
+	if (unlikely(w > screen_stride))
+		w = screen_stride;
+
+	if (0 == h)
+		h = image->height;
+
+	screen += screen_stride * y;
+
+	while (h--) {
+		memcpy(screen + x, data, w);
+		data += img_stride;
+		screen += screen_stride;
+	}
+
+	return VMM_OK;
+}
+
+static int cmd_fb_logo(struct vmm_chardev *cdev, struct fb_info *info,
+		       int argc, char *argv[])
+{
+	unsigned int x = 0;
+	unsigned int y = 0;
+	unsigned int w = 0;
+	unsigned int h = 0;
+
+#ifndef CONFIG_CMD_FB_LOGO
+	vmm_cprintf(cdev, "Logo option is not enabled.");
+	return VMM_EFAIL;
+#else /* CONFIG_CMD_FB_LOGO */
+	if (!info->fbops || !info->fbops->fb_blank) {
+		vmm_cprintf(cdev, "FB 'blank' operation not defined\n");
+		return VMM_EFAIL;
+	}
+
+	if (info->fbops->fb_blank(FB_BLANK_UNBLANK, info)) {
+		vmm_cprintf(cdev, "FB 'blank' operation failed\n");
+		return VMM_EFAIL;
+	}
+
+	if (argc >= 1)
+		x = strtol(argv[0], NULL, 10);
+
+	if (argc >= 2)
+		y = strtol(argv[1], NULL, 10);
+
+	if (argc >= 3)
+		w = strtol(argv[2], NULL, 10);
+
+	if (argc >= 4)
+		h = strtol(argv[3], NULL, 10);
+
+	return fb_write_image(info, &cmd_fb_logo_image, x, y, w, h);
+#endif /* CONFIG_CMD_FB_LOGO */
+}
+
+static int cmd_fb_blank(struct vmm_chardev *cdev, struct fb_info *info,
+			int argc, char **argv)
+{
+	int blank = 0;
+
+	if (argc < 1) {
+		cmd_fb_usage(cdev);
+		return VMM_EFAIL;
+	}
+
+	if (!info->fbops || !info->fbops->fb_blank) {
+		vmm_cprintf(cdev, "FB 'blank' operation not defined\n");
+		return VMM_EFAIL;
+	}
+
+	blank = strtol(argv[0], NULL, 10);
+
+	switch (blank) {
+	case FB_BLANK_POWERDOWN:
+		vmm_cprintf(cdev, "Setting '%s' blank to power down\n",
+			    info->name);
+		break;
+	case FB_BLANK_VSYNC_SUSPEND:
+		vmm_cprintf(cdev, "Setting '%s' blank to vsync suspend\n",
+			    info->name);
+		break;
+	case FB_BLANK_HSYNC_SUSPEND:
+		vmm_cprintf(cdev, "Setting '%s' blank to hsync suspend\n",
+			    info->name);
+		break;
+	case FB_BLANK_NORMAL:
+		vmm_cprintf(cdev, "Setting '%s' blank to normal\n",
+			    info->name);
+		break;
+	case FB_BLANK_UNBLANK:
+		vmm_cprintf(cdev, "Setting '%s' blank to unblank\n",
+			    info->name);
+		break;
+	}
+
+	if (info->fbops->fb_blank(blank, info)) {
+		return VMM_EFAIL;
+	}
+	return VMM_OK;
+}
+
 static int cmd_fb_exec(struct vmm_chardev *cdev, int argc, char **argv)
 {
+	struct fb_info *info = NULL;
+
 	if (argc == 2) {
 		if (strcmp(argv[1], "help") == 0) {
 			cmd_fb_usage(cdev);
@@ -149,12 +375,26 @@ static int cmd_fb_exec(struct vmm_chardev *cdev, int argc, char **argv)
 			return VMM_OK;
 		}
 	}
-	if (argc > 2) {
-		if (strcmp(argv[1], "info") == 0) {
-			return cmd_fb_info(cdev, argv[2]);
-		}
+	if (argc <= 2) {
+		cmd_fb_usage(cdev);
+		return VMM_EFAIL;
 	}
-	cmd_fb_usage(cdev);
+
+	info = fb_find(argv[2]);
+	if (!info) {
+		vmm_cprintf(cdev, "Error: Invalid FB %s\n", argv[2]);
+		return VMM_EFAIL;
+	}
+
+	if (strcmp(argv[1], "info") == 0) {
+		return cmd_fb_info(cdev, info);
+	} else if (0 == strcmp(argv[1], "blank")) {
+		return cmd_fb_blank(cdev, info, argc - 3, argv + 3);
+	} else if (0 == strcmp(argv[1], "fillrect")) {
+		return cmd_fb_fillrect(cdev, info, argc - 3, argv + 3);
+	} else if (0 == strcmp(argv[1], "logo")) {
+		return cmd_fb_logo(cdev, info, argc - 3, argv + 3);
+	}
 	return VMM_EFAIL;
 }
 
