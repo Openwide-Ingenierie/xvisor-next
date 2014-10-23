@@ -1285,7 +1285,6 @@ static int mxcfb_ioctl(struct fb_info *fbi, unsigned int cmd, unsigned long arg)
 		{
 			struct mxcfb_pos pos;
 			struct fb_info *bg_fbi = NULL;
-			/* struct mxcfb_info *bg_mxcfbi = NULL; */
 
 			if (mxc_fbi->ipu_ch != MEM_FG_SYNC) {
 				dev_err(&fbi->dev, "Should use the overlay "
@@ -1301,8 +1300,6 @@ static int mxcfb_ioctl(struct fb_info *fbi, unsigned int cmd, unsigned long arg)
 			}
 
 			bg_fbi = found_registered_fb(MEM_BG_SYNC, mxc_fbi->ipu_id);
-			/* if (bg_fbi) */
-			/* 	bg_mxcfbi = ((struct mxcfb_info *)(bg_fbi->par)); */
 
 			if (bg_fbi == NULL) {
 				dev_err(&fbi->dev, "Cannot find the "
@@ -1797,13 +1794,6 @@ static int mxcfb_map_video_memory(struct fb_info *fbi)
 		fbi->fix.smem_len = fbi->var.yres_virtual *
 				    fbi->fix.line_length;
 
-	if (fbi->screen_base) {
-		dev_dbg(&fbi->dev, "Previous framebuffer freed\n");
-		dma_free_writecombine(&fbi->dev, fbi->fix.smem_len,
-				      fbi->screen_base,
-				      fbi->fix.smem_start);
-		fbi->screen_base = NULL;
-	}
 	fbi->screen_base = dma_alloc_writecombine(&fbi->dev,
 				fbi->fix.smem_len,
 				(dma_addr_t *)&fbi->fix.smem_start,
