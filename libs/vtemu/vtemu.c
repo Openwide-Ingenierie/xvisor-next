@@ -974,6 +974,22 @@ static u32 vtemu_write(struct vmm_chardev *cdev,
 	return i;
 }
 
+static int vtemu_ioctl(struct vmm_chardev *cdev,
+		       int cmd, void *arg)
+{
+	struct vtemu *v = cdev->priv;
+
+	switch (cmd) {
+	case VMM_CHARDEV_RESET:
+		v->x = v->start_y;
+		v->y = v->start_y;
+		break;
+	default:
+		return VMM_EFAIL;
+	}
+	return VMM_OK;
+}
+
 static void vtemu_save(struct fb_info *info, void *priv)
 {
 	struct vtemu *v = priv;
@@ -1036,6 +1052,7 @@ struct vtemu *vtemu_create(const char *name,
 	}
 	v->cdev.read = vtemu_read;
 	v->cdev.write = vtemu_write;
+	v->cdev.ioctl = vtemu_ioctl;
 	v->cdev.priv = v;
 	if (vmm_chardev_register(&v->cdev)) {
 		goto free_vtemu;
