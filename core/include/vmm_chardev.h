@@ -27,8 +27,14 @@
 #include <vmm_limits.h>
 #include <vmm_types.h>
 #include <vmm_devdrv.h>
+#include <uapi/ioctl.h>
 
-#define VMM_CHARDEV_CLASS_NAME				"char"
+#define VMM_CHARDEV_CLASS_NAME			"char"
+
+#define VMM_CHARDEV_MAGIC			'c'
+#define VMM_CHARDEV_IOCTL(CMD)			_IO(VMM_CHARDEV_MAGIC, CMD)
+
+#define VMM_CHARDEV_RESET			VMM_CHARDEV_IOCTL(1)
 
 struct vmm_chardev {
 	char name[VMM_FIELD_NAME_SIZE];

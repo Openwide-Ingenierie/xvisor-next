@@ -58,3 +58,5 @@ commands-objs-$(CONFIG_CMD_VSTELNET)+= cmd_vstelnet.o
 commands-objs-$(CONFIG_CMD_VFS)+= cmd_vfs.o
 
 commands-objs-$(CONFIG_CMD_IMX6)+= cmd_imx6.o
+
+commands-objs-$(CONFIG_CMD_MONITOR) += cmd_monitor.o
