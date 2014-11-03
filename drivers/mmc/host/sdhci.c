@@ -434,7 +434,7 @@ int sdhci_send_command(struct mmc_host *mmc,
 	}
 
 	state = sdhci_readl(host, SDHCI_PRESENT_STATE);
-	while (stat & mask) {
+	while (state & mask) {
 		if (timeout == 0) {
 			vmm_printf("%s: Controller never released "
 				   "inhibit bit(s).\n", __func__);
