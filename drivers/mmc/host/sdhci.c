@@ -394,6 +394,7 @@ err:
 	}
 }
 
+#if 0
 static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 {
 	struct sdhci_host *host;
@@ -405,6 +406,7 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	}
 	return VMM_ENOTAVAIL;
 }
+#endif /* 0 */
 
 int sdhci_send_command(struct mmc_host *mmc,
 			struct mmc_cmd *cmd,
@@ -447,19 +449,19 @@ int sdhci_send_command(struct mmc_host *mmc,
 		state = sdhci_readl(host, SDHCI_PRESENT_STATE);
 	}
 
-	if ((host->flags & SDHCI_NEEDS_RETUNING) &&
-	    !(state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) &&
-	    NULL != mmc->card) {
-		int err = VMM_OK;
+	/* if ((host->flags & SDHCI_NEEDS_RETUNING) && */
+	/*     !(state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) && */
+	/*     NULL != mmc->card) { */
+	/* 	int err = VMM_OK; */
 
-		if (mmc->card->version & MMC_VERSION_MMC)
-			err = sdhci_execute_tuning(mmc,
-						   MMC_CMD_TUNING_BLOCK_HS200);
-		else
-			err = sdhci_execute_tuning(mmc, MMC_CMD_TUNING_BLOCK);
-		if (VMM_OK != err)
-			vmm_printf("%s: Tuning failed\n", __func__);
-	}
+	/* 	if (mmc->card->version & MMC_VERSION_MMC) */
+	/* 		err = sdhci_execute_tuning(mmc, */
+	/* 					   MMC_CMD_TUNING_BLOCK_HS200); */
+	/* 	else */
+	/* 		err = sdhci_execute_tuning(mmc, MMC_CMD_TUNING_BLOCK); */
+	/* 	if (VMM_OK != err) */
+	/* 		vmm_printf("%s: Tuning failed\n", __func__); */
+	/* } */
 
 	spin_unlock_irqrestore(&host->lock, flags);
 	return sdhci_do_send_command(host, cmd, data);
@@ -892,6 +894,12 @@ int sdhci_add_host(struct sdhci_host *host)
 	if (host->caps) {
 		mmc->caps |= host->caps;
 	}
+
+	/* if (host->version >= SDHCI_SPEC_300) { */
+	/* 	INIT_TIMER_EVENT(&host->tuning_timer, sdhci_tuning_timer, */
+	/* 			 host); */
+		
+	/* } */
 
 	sdhci_init(host, 0);
 
