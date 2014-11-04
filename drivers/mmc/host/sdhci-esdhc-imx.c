@@ -515,7 +515,12 @@ static void esdhc_writeb_le(struct sdhci_host *host, u8 val, int reg)
 		return;
 	case SDHCI_HOST_CONTROL:
 		/* FSL messed up here, so we need to manually compose it. */
-		new_val = val & SDHCI_CTRL_LED;
+		new_val = val & (SDHCI_CTRL_LED | SDHCI_CTRL_4BITBUS);
+
+		if (val & SDHCI_CTRL_8BITBUS) {
+			new_val |= 0x2 << 1;
+		}
+
 		/* ensure the endianness */
 		new_val |= ESDHC_HOST_CONTROL_LE;
 		/* bits 8&9 are reserved on mx25 */
@@ -525,12 +530,10 @@ static void esdhc_writeb_le(struct sdhci_host *host, u8 val, int reg)
 		}
 
 		/*
-		 * Do not touch buswidth bits here. This is done in
-		 * esdhc_pltfm_bus_width.
 		 * Do not touch the D3CD bit either which is used for the
 		 * SDIO interrupt errata workaround.
 		 */
-		mask = 0xffff & ~(ESDHC_CTRL_BUSWIDTH_MASK | ESDHC_CTRL_D3CD);
+		mask = 0xffff & ~ESDHC_CTRL_D3CD;
 
 		esdhc_clrset_le(host, mask, new_val, reg);
 		return;
@@ -587,6 +590,8 @@ static inline void esdhc_pltfm_set_clock(struct sdhci_host *host,
 	int pre_div = 2;
 	int div = 1;
 	u32 temp, val;
+
+	/* FIXME: Should check for SDSTB from SDHCI Present State register? */
 
 	if (clock == 0) {
 		if (esdhc_is_usdhc(imx_data)) {
