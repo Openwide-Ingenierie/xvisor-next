@@ -189,6 +189,7 @@ static int __mmc_send_cmd(struct mmc_host *host,
 
 	vmm_printf("CMD_SEND:%d\n", cmd->cmdidx);
 	vmm_printf("\t\tARG\t\t\t 0x%08X\n", cmd->cmdarg);
+	vmm_printf("\t\tDATA\t\t\t 0x%08X\n", data);
 	ret = host->ops.send_cmd(host, cmd, data);
 	switch (cmd->resp_type) {
 		case MMC_RSP_NONE:
@@ -1319,6 +1320,8 @@ static u32 __mmc_bwrite(struct mmc_host *host, struct mmc_card *card,
 	do {
 		cur = (blocks_todo > host->b_max) ?  host->b_max : blocks_todo;
 		if(__mmc_write_blocks(host, card, start, cur, src) != cur) {
+			vmm_printf("%s: Failed to read block %d\n",
+				   host->dev->name, start);
 			return 0;
 		}
 		blocks_todo -= cur;
@@ -1386,7 +1389,8 @@ static u32 __mmc_bread(struct mmc_host *host, struct mmc_card *card,
 	}
 
 	do {
-		cur = (blocks_todo > host->b_max) ?  host->b_max : blocks_todo;
+		/* cur = (blocks_todo > host->b_max) ?  host->b_max : blocks_todo; */
+		cur = 1;
 		if (__mmc_read_blocks(host, card, dst, start, cur) != cur) {
 			return 0;
 		}
