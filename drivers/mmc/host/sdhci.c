@@ -217,7 +217,8 @@ static int _sdhci_transfer_data(struct sdhci_host *host,
 				continue;
 			}
 			sdhci_writel(host, rdy, SDHCI_INT_STATUS);
-			sdhci_transfer_pio(host, data);
+			if (!(host->sdhci_caps & SDHCI_CAN_DO_SDMA))
+				sdhci_transfer_pio(host, data);
 			data->dest += data->blocksize;
 			if (++block >= data->blocks) {
 				break;
@@ -410,7 +411,7 @@ int sdhci_send_command(struct mmc_host *mmc,
 			struct mmc_data *data)
 {
 	u32 mask = 0;
-	u32 timeout, stat = 0;
+	u32 timeout;
 	u32 state = 0;
 	struct sdhci_host *host = mmc_priv(mmc);
 	irq_flags_t flags;

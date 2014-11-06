@@ -343,8 +343,8 @@ static void esdhc_writel_le(struct sdhci_host *host, u32 val, int reg)
 		u32 paddr = 0;
 
 		if (VMM_OK != vmm_host_va2pa(val, &paddr)) {
-			dev_info(host->mmc->dev, "Failed to get physical "
-				 "address for DMA (va: 0x%X)\n", val);
+			dev_err(host->mmc->dev, "Failed to get physical "
+				"address for DMA (va: 0x%X)\n", val);
 		}
 		val = paddr;
 	}
@@ -709,7 +709,7 @@ int sdhci_do_send_command(struct sdhci_host *host,
 static int esdhc_send_tuning_cmd(struct sdhci_host *host, u32 opcode)
 {
 	struct mmc_cmd cmd = {0};
-	struct mmc_request mrq = {0};
+	/* struct mmc_request mrq = {0}; */
 	struct mmc_data data;
 	struct scatterlist sg;
 	char tuning_pattern[ESDHC_TUNING_BLOCK_PATTERN_LEN];
