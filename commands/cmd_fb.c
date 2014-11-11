@@ -28,6 +28,7 @@
 #include <vmm_cmdmgr.h>
 #include <vmm_delay.h>
 #include <libs/stringlib.h>
+#include <libs/image_loader.h>
 #include <drv/fb.h>
 
 #include "cmd_fb_logo.h"
@@ -50,6 +51,7 @@ static void cmd_fb_usage(struct vmm_chardev *cdev)
 	vmm_cprintf(cdev, "   fb fillrect <fb_name> <x> <y> <w> <h> <c> "
 		    "[<rop>]\n");
 	vmm_cprintf(cdev, "   fb logo <fb_name> <x> <y> <w> <h>\n");
+	vmm_cprintf(cdev, "   fb image <fb_name> <image path> <x> <y>\n");
 }
 
 static void cmd_fb_list(struct vmm_chardev *cdev)
@@ -281,10 +283,10 @@ static int fb_write_image(struct fb_info *info, const struct fb_image *image,
 static int cmd_fb_logo(struct vmm_chardev *cdev, struct fb_info *info,
 		       int argc, char *argv[])
 {
-#ifndef CONFIG_CMD_FB_LOGO
+#if !defined(CONFIG_CMD_FB_LOGO)
 	vmm_cprintf(cdev, "Logo option is not enabled.\n");
 	return VMM_EFAIL;
-#else /* CONFIG_CMD_FB_LOGO */
+#else /* defined(CONFIG_CMD_FB_LOGO) */
 	unsigned int x = 0;
 	unsigned int y = 0;
 	unsigned int w = 0;
@@ -313,7 +315,7 @@ static int cmd_fb_logo(struct vmm_chardev *cdev, struct fb_info *info,
 		h = strtol(argv[3], NULL, 10);
 
 	return fb_write_image(info, &cmd_fb_logo_image, x, y, w, h);
-#endif /* CONFIG_CMD_FB_LOGO */
+#endif /* defined(CONFIG_CMD_FB_LOGO) */
 }
 
 static int cmd_fb_blank(struct vmm_chardev *cdev, struct fb_info *info,
@@ -362,6 +364,47 @@ static int cmd_fb_blank(struct vmm_chardev *cdev, struct fb_info *info,
 	return VMM_OK;
 }
 
+static int cmd_fb_image(struct vmm_chardev *cdev, struct fb_info *info,
+			int argc, char **argv)
+{
+#if !defined(CONFIG_CMD_FB_IMAGE)
+	vmm_cprintf(cdev, "This command is not available\n");
+	return VMM_EFAIL;
+#else /* defined(CONFIG_CMD_FB_IMAGE) */
+	int err = VMM_OK;
+	struct fb_image *image = NULL;
+
+	if (argc < 1) {
+		cmd_fb_usage(cdev);
+		return VMM_EFAIL;
+	}
+
+	if (NULL == (image = vmm_zalloc(sizeof (struct fb_image)))) {
+		vmm_cprintf(cdev, "Error, failed to allocate image "
+			    "structure\n");
+		return VMM_EFAIL;
+	}
+
+	if (argc >= 2)
+		image->dx = strtol(argv[1], NULL, 10);
+
+	if (argc >= 3)
+		image->dy = strtol(argv[2], NULL, 10);
+
+	if (VMM_OK != (err = image_load(argv[0], &format_rgb565, image))) {
+		vmm_cprintf(cdev, "Error, failed to load image \"%s\" (%d)\n",
+			    argv[0], err);
+		return err;
+	}
+
+	err = fb_write_image(info, image, image->dx, image->dy, image->width,
+			     image->height);
+	image_release(image);
+
+	return err;
+#endif /* defined(CONFIG_CMD_FB_IMAGE) */
+}
+
 static int cmd_fb_exec(struct vmm_chardev *cdev, int argc, char **argv)
 {
 	struct fb_info *info = NULL;
@@ -394,6 +437,8 @@ static int cmd_fb_exec(struct vmm_chardev *cdev, int argc, char **argv)
 		return cmd_fb_fillrect(cdev, info, argc - 3, argv + 3);
 	} else if (0 == strcmp(argv[1], "logo")) {
 		return cmd_fb_logo(cdev, info, argc - 3, argv + 3);
+	} else if (0 == strcmp(argv[1], "image")) {
+		return cmd_fb_image(cdev, info, argc - 3, argv + 3);
 	}
 	return VMM_EFAIL;
 }
