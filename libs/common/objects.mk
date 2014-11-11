@@ -63,3 +63,4 @@ endif
 
 libs-objs-$(CONFIG_GENALLOC)+= common/genalloc.o
 libs-objs-y+= common/bitrev.o
+libs-objs-$(CONFIG_IMAGE_LOADER)+= common/image_loader.o
