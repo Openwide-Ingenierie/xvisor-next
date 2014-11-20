@@ -464,6 +464,8 @@
 				reg = <0x02020000 0x4000>;
 				clock-frequency = <80000000>;
 				interrupts = <58>;
+				clock-names = "uart_ipg", "uart_serial";
+				clocks = <&clks 160>, <&clks 161>;
 			};
 
 			SERIAL2: uart2 {
@@ -471,6 +473,8 @@
 				reg = <0x021e8000 0x4000>;
 				clock-frequency = <80000000>;
 				interrupts = <59>;
+				clock-names = "uart_ipg", "uart_serial";
+				clocks = <&clks 160>, <&clks 161>;
 			};
 
 			SERIAL3: uart3 {
@@ -478,6 +482,8 @@
 				reg = <0x021ec000 0x4000>;
 				clock-frequency = <80000000>;
 				interrupts = <60>;
+				clock-names = "uart_ipg", "uart_serial";
+				clocks = <&clks 160>, <&clks 161>;
 			};
 
 			SERIAL4: uart4 {
@@ -485,6 +491,8 @@
 				reg = <0x021f0000 0x4000>;
 				clock-frequency = <80000000>;
 				interrupts = <61>;
+				clock-names = "uart_ipg", "uart_serial";
+				clocks = <&clks 160>, <&clks 161>;
 			};
 
 			SERIAL5: uart5 {
@@ -492,6 +500,8 @@
 				reg = <0x021f4000 0x4000>;
 				clock-frequency = <80000000>;
 				interrupts = <62>;
+				clock-names = "uart_ipg", "uart_serial";
+				clocks = <&clks 160>, <&clks 161>;
 			};
 
 			epit1 {
