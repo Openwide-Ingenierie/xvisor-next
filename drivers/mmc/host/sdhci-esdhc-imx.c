@@ -62,6 +62,8 @@
 #define  ESDHC_MIX_CTRL_FBCLK_SEL	(1 << 25)
 /* Bits 3 and 6 are not SDHCI standard definitions */
 #define  ESDHC_MIX_CTRL_SDHCI_MASK	0xb7
+/* Tuning bits */
+#define  ESDHC_MIX_CTRL_TUNING_MASK     0x03c00000
 
 /* dll control register */
 #define ESDHC_DLL_CTRL			0x60
@@ -230,6 +232,8 @@ static u32 esdhc_readl_le(struct sdhci_host *host, int reg)
 		val |= (fsl_prss & 0x0F000000) >> 4;
 		/* move cmd line bit */
 		val |= (fsl_prss & 0x00800000) << 1;
+		/* Move SD clock stable bit */
+		val |= (fsl_prss & 0x00000008) << 14;
 	}
 
 	if (unlikely(reg == SDHCI_CAPABILITIES)) {
@@ -342,6 +346,7 @@ static void esdhc_writel_le(struct sdhci_host *host, u32 val, int reg)
 	if (unlikely(reg == SDHCI_DMA_ADDRESS)) {
 		u32 paddr = 0;
 
+		/* Check TC bit? See the end of the datasheet p5630. */
 		if (VMM_OK != vmm_host_va2pa(val, &paddr)) {
 			dev_err(host->mmc->dev, "Failed to get physical "
 				"address for DMA (va: 0x%X)\n", val);
@@ -555,7 +560,10 @@ static void esdhc_writeb_le(struct sdhci_host *host, u8 val, int reg)
 		 * Do it manually here.
 		 */
 		if (esdhc_is_usdhc(imx_data)) {
-			writel(0, host->ioaddr + ESDHC_MIX_CTRL);
+			/* the tuning bits should be kept during reset */
+			new_val = readl(host->ioaddr + ESDHC_MIX_CTRL);
+			writel(new_val & ESDHC_MIX_CTRL_TUNING_MASK,
+			       host->ioaddr + ESDHC_MIX_CTRL);
 			imx_data->is_ddr = 0;
 		}
 	}
@@ -1096,9 +1104,9 @@ static int sdhci_esdhc_imx_probe(struct vmm_device *dev,
 	return 0;
 
 disable_clk:
-	clk_disable_unprepare(imx_data->clk_per);
-	clk_disable_unprepare(imx_data->clk_ipg);
-	clk_disable_unprepare(imx_data->clk_ahb);
+	/* clk_disable_unprepare(imx_data->clk_per); */
+	/* clk_disable_unprepare(imx_data->clk_ipg); */
+	/* clk_disable_unprepare(imx_data->clk_ahb); */
 free_reg:
 	vmm_devtree_regunmap(dev->node, (virtual_addr_t)host->ioaddr, 0);
 free_sdhci:
@@ -1110,14 +1118,14 @@ free_nothing:
 static int sdhci_esdhc_imx_remove(struct vmm_device *dev)
 {
 	struct sdhci_host *host = dev->priv;
-	struct pltfm_imx_data *imx_data = sdhci_priv(host);
+	/* struct pltfm_imx_data *imx_data = sdhci_priv(host); */
 	int dead = (readl(host->ioaddr + SDHCI_INT_STATUS) == 0xffffffff);
 
 	sdhci_remove_host(host, dead);
 
-	clk_disable_unprepare(imx_data->clk_per);
-	clk_disable_unprepare(imx_data->clk_ipg);
-	clk_disable_unprepare(imx_data->clk_ahb);
+	/* clk_disable_unprepare(imx_data->clk_per); */
+	/* clk_disable_unprepare(imx_data->clk_ipg); */
+	/* clk_disable_unprepare(imx_data->clk_ahb); */
 
 	vmm_devtree_regunmap(dev->node, (virtual_addr_t)host->ioaddr, 0);
 	sdhci_free_host(host);

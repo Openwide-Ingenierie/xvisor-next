@@ -390,6 +390,9 @@ struct sdhci_host {
 	struct mmc_cmd *cmd;	/* Current command */
 
 	void *aligned_buffer; /* Used when DMA address has to be 8-byte aligned */
+	int tuning_done;	/* Condition flag set when CMD19 succeeds */
+	struct vmm_timer_event tuning_timer;	/* Timer for tuning */
+	struct vmm_completion wait_command;
 
 	unsigned long priv[0];
 };

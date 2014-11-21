@@ -52,8 +52,10 @@
  *  Debugging related defines
  */
 #undef CONFIG_MMC_TRACE
+/* #define CONFIG_MMC_TRACE */
 
 #undef DEBUG
+/* #define DEBUG */
 
 #ifdef DEBUG
 #define DPRINTF(msg...)			vmm_printf(msg)
@@ -1389,8 +1391,7 @@ static u32 __mmc_bread(struct mmc_host *host, struct mmc_card *card,
 	}
 
 	do {
-		/* cur = (blocks_todo > host->b_max) ?  host->b_max : blocks_todo; */
-		cur = 1;
+		cur = (blocks_todo > host->b_max) ?  host->b_max : blocks_todo;
 		if (__mmc_read_blocks(host, card, dst, start, cur) != cur) {
 			return 0;
 		}
