@@ -449,15 +449,15 @@
 				status = "disabled";
 			};
 
-			usdhc4: usdhc@0219c000 {
-				compatible = "fsl,imx6q-usdhc";
-				reg = <0x0219c000 0x4000>;
-				interrupts = <57>;
-				clocks = <&clks 166>, <&clks 166>, <&clks 166>;
-				clock-names = "ipg", "ahb", "per";
-				bus-width = <4>;
-				status = "disabled";
-			};
+			/* usdhc4: usdhc@0219c000 { */
+			/* 	compatible = "fsl,imx6q-usdhc"; */
+			/* 	reg = <0x0219c000 0x4000>; */
+			/* 	interrupts = <57>; */
+			/* 	clocks = <&clks 166>, <&clks 166>, <&clks 166>; */
+			/* 	clock-names = "ipg", "ahb", "per"; */
+			/* 	bus-width = <4>; */
+			/* 	status = "disabled"; */
+			/* }; */
 
 			SERIAL1: uart1 {
 				compatible = "freescale,imx-uart";
