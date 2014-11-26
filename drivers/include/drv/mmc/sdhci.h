@@ -393,6 +393,7 @@ struct sdhci_host {
 	int tuning_done;	/* Condition flag set when CMD19 succeeds */
 	struct vmm_timer_event tuning_timer;	/* Timer for tuning */
 	struct vmm_completion wait_command;
+	struct vmm_completion wait_dma;
 
 	unsigned long priv[0];
 };

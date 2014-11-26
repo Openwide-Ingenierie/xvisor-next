@@ -154,9 +154,8 @@ static void sdhci_init(struct sdhci_host *host, int soft)
 	sdhci_writel(host, SDHCI_INT_DATA_MASK | SDHCI_INT_CMD_MASK,
 		     SDHCI_INT_ENABLE);
 
-	/* Mask all sdhci interrupt sources */
-	sdhci_writel(host, SDHCI_INT_CMD_MASK,
-		     SDHCI_SIGNAL_ENABLE);
+	/* Enable SDHCI command interrupt sources */
+	sdhci_writel(host, SDHCI_INT_CMD_MASK, SDHCI_SIGNAL_ENABLE);
 }
 
 static void sdhci_cmd_done(struct sdhci_host *host, struct mmc_cmd *cmd)
@@ -176,6 +175,36 @@ static void sdhci_cmd_done(struct sdhci_host *host, struct mmc_cmd *cmd)
 	}
 }
 
+static int sdhci_transfer_dma(struct sdhci_host *host,
+			      struct mmc_data *data,
+			      u32 start_addr)
+{
+	int rc = VMM_OK;
+	u64 timeout = 100000000;
+	u32 ctrl, val;
+
+	val = sdhci_readl(host, SDHCI_SIGNAL_ENABLE);
+	val |= SDHCI_INT_DMA_END | SDHCI_INT_ACMD12ERR |
+		SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_DMA_END;
+	val &= ~SDHCI_INT_DATA_END;
+	sdhci_writel(host, val, SDHCI_SIGNAL_ENABLE);
+
+	/* TODO enable ac12en in mixer control */
+	ctrl = sdhci_readl(host, SDHCI_HOST_CONTROL);
+	ctrl &= ~SDHCI_CTRL_DMA_MASK;
+	ctrl |= SDHCI_CTRL_SDMA;
+	sdhci_writel(host, ctrl, SDHCI_HOST_CONTROL);
+
+	rc = vmm_completion_wait_timeout(&host->wait_dma, &timeout);
+	if (VMM_ETIMEDOUT == rc) {
+		vmm_printf("%s: Transfer data timeout (%d)\n", __func__,
+			   timeout);
+		return rc;
+	}
+
+	return VMM_OK;
+}
+
 static void sdhci_transfer_pio(struct sdhci_host *host, struct mmc_data *data)
 {
 	int i;
@@ -190,22 +219,17 @@ static void sdhci_transfer_pio(struct sdhci_host *host, struct mmc_data *data)
 	}
 }
 
-static int sdhci_transfer_data(struct sdhci_host *host, 
+static int sdhci_transfer_data(struct sdhci_host *host,
 				struct mmc_data *data,
 				u32 start_addr)
 {
-	u32 ctrl, stat, rdy, mask, timeout, block = 0;
-
-	if (host->sdhci_caps & SDHCI_CAN_DO_SDMA) {
-		ctrl = sdhci_readl(host, SDHCI_HOST_CONTROL);
-		ctrl &= ~SDHCI_CTRL_DMA_MASK;
-		ctrl |= SDHCI_CTRL_SDMA;
-		sdhci_writel(host, ctrl, SDHCI_HOST_CONTROL);
-	}
+	u32 stat, rdy, mask, timeout, block = 0;
 
 	timeout = 1000000;
+
 	rdy = SDHCI_INT_SPACE_AVAIL | SDHCI_INT_DATA_AVAIL;
 	mask = SDHCI_DATA_AVAILABLE | SDHCI_SPACE_AVAILABLE;
+
 	do {
 		stat = sdhci_readl(host, SDHCI_INT_STATUS);
 		if (stat & SDHCI_INT_ERROR) {
@@ -219,23 +243,10 @@ static int sdhci_transfer_data(struct sdhci_host *host,
 				continue;
 			}
 			sdhci_writel(host, rdy, SDHCI_INT_STATUS);
-			if (!(host->sdhci_caps & SDHCI_CAN_DO_SDMA))
-				sdhci_transfer_pio(host, data);
+			sdhci_transfer_pio(host, data);
 			data->dest += data->blocksize;
 			if (++block >= data->blocks) {
 				break;
-			}
-		}
-
-		if (host->sdhci_caps & SDHCI_CAN_DO_SDMA) {
-			if (stat & SDHCI_INT_DMA_END) {
-				sdhci_writel(host, SDHCI_INT_DMA_END, 
-							SDHCI_INT_STATUS);
-				start_addr &= 
-					~(SDHCI_DEFAULT_BOUNDARY_SIZE - 1);
-				start_addr += SDHCI_DEFAULT_BOUNDARY_SIZE;
-				sdhci_writel(host, start_addr, 
-							SDHCI_DMA_ADDRESS);
 			}
 		}
 
@@ -342,16 +353,16 @@ int sdhci_do_send_command(struct sdhci_host *host,
 		}
 	}
 
-	stat = sdhci_readl(host, SDHCI_INT_STATUS);
-	if ((stat & mask) == mask) {
-		sdhci_cmd_done(host, cmd);
-		sdhci_writel(host, mask, SDHCI_INT_STATUS);
-	} else {
-		ret = VMM_EFAIL;
-	}
+	sdhci_cmd_done(host, cmd);
+	sdhci_writel(host, mask, SDHCI_INT_STATUS);
 
 	if (!ret && data) {
-		ret = sdhci_transfer_data(host, data, start_addr);
+		if (host->sdhci_caps & SDHCI_CAN_DO_SDMA) {
+			ret = sdhci_transfer_dma(host, data, start_addr);
+		}
+		else {
+			ret = sdhci_transfer_data(host, data, start_addr);
+		}
 	}
 
 	if (host->quirks & SDHCI_QUIRK_WAIT_SEND_CMD) {
@@ -378,6 +389,7 @@ int sdhci_do_send_command(struct sdhci_host *host,
 	}
 }
 
+#if 0
 static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 {
 	struct sdhci_host *host;
@@ -398,6 +410,7 @@ static void sdhci_tuning_timer(struct vmm_timer_event *timer)
 
 	host->flags |= SDHCI_NEEDS_RETUNING;
 }
+#endif /* 0 */
 
 int sdhci_send_command(struct mmc_host *mmc,
 			struct mmc_cmd *cmd,
@@ -439,19 +452,21 @@ int sdhci_send_command(struct mmc_host *mmc,
 		arch_smp_rmb();
 	}
 
-	/* if ((host->flags & SDHCI_NEEDS_RETUNING) && */
-	/*     !(state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) && */
-	/*     NULL != mmc->card) { */
-	/* 	int err = VMM_OK; */
+#if 0
+	if ((host->flags & SDHCI_NEEDS_RETUNING) &&
+	    !(state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ)) &&
+	    NULL != mmc->card) {
+		int err = VMM_OK;
 
-	/* 	if (mmc->card->version & MMC_VERSION_MMC) */
-	/* 		err = sdhci_execute_tuning(mmc, */
-	/* 					   MMC_CMD_TUNING_BLOCK_HS200); */
-	/* 	else */
-	/* 		err = sdhci_execute_tuning(mmc, MMC_CMD_TUNING_BLOCK); */
-	/* 	if (VMM_OK != err) */
-	/* 		vmm_printf("%s: Tuning failed\n", __func__); */
-	/* } */
+		if (mmc->card->version & MMC_VERSION_MMC)
+			err = sdhci_execute_tuning(mmc,
+						   MMC_CMD_TUNING_BLOCK_HS200);
+		else
+			err = sdhci_execute_tuning(mmc, MMC_CMD_TUNING_BLOCK);
+		if (VMM_OK != err)
+			vmm_printf("%s: Tuning failed\n", __func__);
+	}
+#endif /* 0 */
 
 	return sdhci_do_send_command(host, cmd, data);
 }
@@ -684,7 +699,7 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 
 static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 {
-	/* Not used right now. */
+	vmm_completion_complete(&host->wait_dma);
 }
 
 static vmm_irq_return_t sdhci_irq_handler(int irq_no, void *dev)
@@ -728,7 +743,7 @@ static vmm_irq_return_t sdhci_irq_handler(int irq_no, void *dev)
 
 	if (intmask & SDHCI_INT_CMD_MASK) {
 		sdhci_writel(host, intmask & SDHCI_INT_CMD_MASK,
-			SDHCI_INT_STATUS);
+			     SDHCI_INT_STATUS);
 		sdhci_cmd_irq(host, intmask & SDHCI_INT_CMD_MASK);
 	}
 
@@ -776,6 +791,7 @@ struct sdhci_host *sdhci_alloc_host(struct vmm_device *dev, int extra)
 	host->dev = dev;
 	INIT_SPIN_LOCK(&host->lock);
 	INIT_COMPLETION(&host->wait_command);
+	INIT_COMPLETION(&host->wait_dma);
 
 	return host;
 }
@@ -860,10 +876,12 @@ int sdhci_add_host(struct sdhci_host *host)
 		mmc->caps |= host->caps;
 	}
 
-	/* if ((host->sdhci_version & SDHCI_SPEC_VER_MASK) >= SDHCI_SPEC_300) { */
-	/* 	INIT_TIMER_EVENT(&host->tuning_timer, sdhci_tuning_timer, */
-	/* 			 host); */
-	/* } */
+#if 0
+	if ((host->sdhci_version & SDHCI_SPEC_VER_MASK) >= SDHCI_SPEC_300) {
+		INIT_TIMER_EVENT(&host->tuning_timer, sdhci_tuning_timer,
+				 host);
+	}
+#endif /* 0 */
 
 	sdhci_init(host, 0);
 
