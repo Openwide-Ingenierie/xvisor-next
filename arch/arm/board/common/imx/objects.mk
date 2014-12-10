@@ -32,4 +32,5 @@ board-common-objs-$(CONFIG_IMX6Q_CLK)+= imx/clk.o
 board-common-objs-$(CONFIG_IMX_CPU)+= imx/cpu.o
 board-common-objs-$(CONFIG_IMX6Q_CLK)+= imx/gpc.o
 board-common-objs-$(CONFIG_IMX6Q_PM)+= imx/pm-imx6q.o
-
+#todo: conf
+board-common-objs-y+= imx/smp_imx.o

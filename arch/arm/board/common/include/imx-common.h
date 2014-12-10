@@ -110,5 +110,7 @@ int imx6q_set_lpm(enum mxc_cpu_pwr_mode mode);
 void imx6q_pm_set_ccm_base(void __iomem *base);
 void imx6q_clocks_dump(void);
 struct clk* imx_clk_get(enum mx6q_clks clkid);
+void imx_enable_cpu(int cpu, bool enable);
+void imx_set_cpu_jump(int cpu, void *jump_addr);
 
 #endif
