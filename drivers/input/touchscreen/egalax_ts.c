@@ -105,8 +105,7 @@ static int egalax_ts_process(void *dev_id)
 	struct i2c_client *client = data->client;
 	struct egalax_pointer *events = data->events;
 	int process_stop = 0;
-	char tbuf[MAX_I2C_DATA_LEN];
-	char *buf = tbuf + 2;
+	char buf[MAX_I2C_DATA_LEN];
 	int id, ret, x, y;
 	bool down, valid;
 	u8 state;
@@ -114,7 +113,7 @@ static int egalax_ts_process(void *dev_id)
 	while (!process_stop) {
 		vmm_completion_wait(&data->completion);
 	retry:
-		ret = i2c_master_recv(client, tbuf, MAX_I2C_DATA_LEN);
+		ret = i2c_master_recv(client, buf, MAX_I2C_DATA_LEN);
 		if (ret == -EAGAIN) {
 			goto retry;
 		}
