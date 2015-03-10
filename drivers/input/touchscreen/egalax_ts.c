@@ -22,7 +22,6 @@
 
 #include <vmm_completion.h>
 
-#define DEV_DEBUG
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
@@ -35,7 +34,6 @@
 #include <linux/bitops.h>
 #include <linux/input/mt.h>
 #include <linux/of_gpio.h>
-#undef DEV_DEBUG
 
 /*
  * Mouse Mode: some panel may configure the controller to mouse mode,
@@ -79,6 +77,7 @@ struct egalax_ts {
 	struct i2c_client		*client;
 	struct input_dev		*input_dev;
 	struct vmm_completion		completion;
+	int				gpio;
 	struct egalax_pointer		events[MAX_SUPPORT_POINTS];
 	struct vmm_thread		*thread;
 };
@@ -98,160 +97,151 @@ static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int egalax_ts_process(void *dev_id)
+static int egalax_ts_read(struct egalax_ts *data)
 {
-	struct egalax_ts *data = dev_id;
 	struct input_dev *input_dev = data->input_dev;
 	struct i2c_client *client = data->client;
 	struct egalax_pointer *events = data->events;
-	int process_stop = 0;
 	char buf[MAX_I2C_DATA_LEN];
 	int id, ret, x, y;
 	bool down, valid;
 	u8 state;
+#ifdef DEV_DEBUG
+	u32 i = 0;
+#endif
+
+	do {
+		ret = i2c_master_recv(client, buf, MAX_I2C_DATA_LEN);
+	} while (-EAGAIN == ret);
+
+#ifdef DEV_DEBUG
+	vmm_printf("TS:");
+	for (i = 0; i < sizeof (buf); ++i) {
+		vmm_printf(" 0x%02x", buf[i]);
+	}
+	vmm_printf("\n");
+#endif
+
+	if (ret < 0) {
+		return VMM_EFAIL;
+	}
+
+	if (buf[0] != REPORT_MODE_VENDOR
+	    && buf[0] != REPORT_MODE_SINGLE
+	    && buf[0] != REPORT_MODE_MTTOUCH) {
+		/* invalid point */
+		return VMM_EFAIL;
+	}
+
+	if (buf[0] == REPORT_MODE_VENDOR) {
+		dev_dbg(&client->dev, "vendor message, ignored\n");
+		return VMM_OK;
+	}
+
+	state = buf[1];
+	x = (buf[3] << 8) | buf[2];
+	y = (buf[5] << 8) | buf[4];
+
+	dev_dbg(&client->dev, "%d %d\n", x, y);
+	vmm_printf("%d %d\n", x, y);
+	/* Currently, the panel Freescale using on SMD board _NOT_
+	 * support single pointer mode. All event are going to
+	 * multiple pointer mode.  Add single pointer mode according
+	 * to EETI eGalax I2C programming manual.
+	 */
+	if (buf[0] == REPORT_MODE_SINGLE) {
+		input_report_abs(input_dev, ABS_X, x);
+		input_report_abs(input_dev, ABS_Y, y);
+		input_report_key(input_dev, BTN_TOUCH, !!state);
+		input_sync(input_dev);
+		return VMM_OK;
+	}
+
+	/* deal with multiple touch  */
+	valid = state & EVENT_VALID_MASK;
+	id = (state & EVENT_ID_MASK) >> EVENT_ID_OFFSET;
+	down = state & EVENT_DOWN_UP;
+
+	if (!valid || id > MAX_SUPPORT_POINTS) {
+		dev_dbg(&client->dev, "invalid point\n");
+		return VMM_OK;
+	}
+
+	if (down) {
+		events[id].valid = valid;
+		events[id].status = down;
+		events[id].x = x;
+		events[id].y = y;
+
+#ifdef CONFIG_TOUCHSCREEN_EGALAX_SINGLE_TOUCH
+		input_report_abs(input_dev, ABS_X, x);
+		input_report_abs(input_dev, ABS_Y, y);
+		input_event(data->input_dev, EV_KEY, BTN_TOUCH, 1);
+		input_report_abs(input_dev, ABS_PRESSURE, 1);
+#endif
+	} else {
+		dev_dbg(&client->dev, "release id:%d\n", id);
+		events[id].valid = 0;
+		events[id].status = 0;
+#ifdef CONFIG_TOUCHSCREEN_EGALAX_SINGLE_TOUCH
+		input_report_key(input_dev, BTN_TOUCH, 0);
+		input_report_abs(input_dev, ABS_PRESSURE, 0);
+#else
+		input_report_abs(input_dev, ABS_MT_TRACKING_ID, id);
+		input_event(input_dev, EV_ABS, ABS_MT_TOUCH_MAJOR, 0);
+		input_mt_sync(input_dev);
+#endif
+	}
+
+#ifndef CONFIG_TOUCHSCREEN_EGALAX_SINGLE_TOUCH
+	/* report all pointers */
+	for (i = 0; i < MAX_SUPPORT_POINTS; i++) {
+		if (!events[i].valid)
+			continue;
+		dev_dbg(&client->dev, "report id:%d valid:%d x:%d y:%d",
+			i, valid, x, y);
+		input_report_abs(input_dev,
+				 ABS_MT_TRACKING_ID, i);
+		input_report_abs(input_dev,
+				 ABS_MT_TOUCH_MAJOR, 1);
+		input_report_abs(input_dev,
+				 ABS_MT_POSITION_X, events[i].x);
+		input_report_abs(input_dev,
+				 ABS_MT_POSITION_Y, events[i].y);
+		input_mt_sync(input_dev);
+	}
+#endif
+	input_sync(input_dev);
+
+	return VMM_OK;
+}
+
+static int egalax_ts_process(void *dev_id)
+{
+	struct egalax_ts *data = dev_id;
+	struct i2c_client *client = data->client;
+	int process_stop = 0;
 
 	while (!process_stop) {
 		vmm_completion_wait(&data->completion);
-	retry:
-		ret = i2c_master_recv(client, buf, MAX_I2C_DATA_LEN);
-		if (ret == -EAGAIN) {
-			goto retry;
+		while (0 == gpio_get_value(data->gpio)) {
+			egalax_ts_read(data);
 		}
-
-		if (ret < 0) {
-			vmm_host_irq_set_type(client->irq,
-					      VMM_IRQ_TYPE_LEVEL_LOW);
-			continue;
-		}
-
-		if (buf[0] != REPORT_MODE_VENDOR
-		    && buf[0] != REPORT_MODE_SINGLE
-		    && buf[0] != REPORT_MODE_MTTOUCH) {
-			/* invalid point */
-			vmm_host_irq_set_type(client->irq,
-					      VMM_IRQ_TYPE_LEVEL_LOW);
-			continue;
-		}
-
-		if (buf[0] == REPORT_MODE_VENDOR) {
-			dev_dbg(&client->dev, "vendor message, ignored\n");
-			vmm_host_irq_set_type(client->irq,
-					      VMM_IRQ_TYPE_LEVEL_LOW);
-			continue;
-		}
-
-		state = buf[1];
-		x = (buf[3] << 8) | buf[2];
-		y = (buf[5] << 8) | buf[4];
-
-		dev_dbg(&client->dev, "%d %d\n", x, y);
-		/* Currently, the panel Freescale using on SMD board _NOT_
-		 * support single pointer mode. All event are going to
-		 * multiple pointer mode.  Add single pointer mode according
-		 * to EETI eGalax I2C programming manual.
-		 */
-		if (buf[0] == REPORT_MODE_SINGLE) {
-			input_report_abs(input_dev, ABS_X, x);
-			input_report_abs(input_dev, ABS_Y, y);
-			input_report_key(input_dev, BTN_TOUCH, !!state);
-			input_sync(input_dev);
-			vmm_host_irq_set_type(client->irq,
-					      VMM_IRQ_TYPE_LEVEL_LOW);
-			continue;
-		}
-
-		/* deal with multiple touch  */
-		valid = state & EVENT_VALID_MASK;
-		id = (state & EVENT_ID_MASK) >> EVENT_ID_OFFSET;
-		down = state & EVENT_DOWN_UP;
-
-		if (!valid || id > MAX_SUPPORT_POINTS) {
-			dev_dbg(&client->dev, "invalid point\n");
-			vmm_host_irq_set_type(client->irq,
-					      VMM_IRQ_TYPE_LEVEL_LOW);
-			continue;
-		}
-
-		if (down) {
-			events[id].valid = valid;
-			events[id].status = down;
-			events[id].x = x;
-			events[id].y = y;
-
-#ifdef CONFIG_TOUCHSCREEN_EGALAX_SINGLE_TOUCH
-			input_report_abs(input_dev, ABS_X, x);
-			input_report_abs(input_dev, ABS_Y, y);
-			input_event(data->input_dev, EV_KEY, BTN_TOUCH, 1);
-			input_report_abs(input_dev, ABS_PRESSURE, 1);
-#endif
-		} else {
-			dev_dbg(&client->dev, "release id:%d\n", id);
-			events[id].valid = 0;
-			events[id].status = 0;
-#ifdef CONFIG_TOUCHSCREEN_EGALAX_SINGLE_TOUCH
-			input_report_key(input_dev, BTN_TOUCH, 0);
-			input_report_abs(input_dev, ABS_PRESSURE, 0);
-#else
-			input_report_abs(input_dev, ABS_MT_TRACKING_ID, id);
-			input_event(input_dev, EV_ABS, ABS_MT_TOUCH_MAJOR, 0);
-			input_mt_sync(input_dev);
-#endif
-		}
-
-#ifndef CONFIG_TOUCHSCREEN_EGALAX_SINGLE_TOUCH
-		/* report all pointers */
-		for (i = 0; i < MAX_SUPPORT_POINTS; i++) {
-			if (!events[i].valid)
-				continue;
-			dev_dbg(&client->dev, "report id:%d valid:%d x:%d y:%d",
-				i, valid, x, y);
-			input_report_abs(input_dev,
-					 ABS_MT_TRACKING_ID, i);
-			input_report_abs(input_dev,
-					 ABS_MT_TOUCH_MAJOR, 1);
-			input_report_abs(input_dev,
-					 ABS_MT_POSITION_X, events[i].x);
-			input_report_abs(input_dev,
-					 ABS_MT_POSITION_Y, events[i].y);
-			input_mt_sync(input_dev);
-		}
-#endif
-		input_sync(input_dev);
-		vmm_host_irq_set_type(client->irq, VMM_IRQ_TYPE_LEVEL_LOW);
 	}
+	vmm_host_irq_set_type(client->irq, VMM_IRQ_TYPE_LEVEL_LOW);
 
 	return VMM_OK;
 }
 
 /* wake up controller by an falling edge of interrupt gpio.  */
-static int egalax_wake_up_device(struct i2c_client *client)
+static int egalax_wake_up_device(int gpio)
 {
-	struct device_node *np = client->dev.node;
-	int gpio;
-	int ret;
-
-	if (!np)
-		return -ENODEV;
-
-	gpio = of_get_named_gpio(np, "wakeup-gpios", 0);
-	if (!gpio_is_valid(gpio))
-		return -ENODEV;
-
-	ret = gpio_request(gpio, "egalax_irq");
-	if (ret < 0) {
-		dev_err(&client->dev,
-			"request gpio failed, cannot wake up controller: %d\n",
-			ret);
-		return ret;
-	}
-
 	/* wake up controller via an falling edge on IRQ gpio. */
 	gpio_direction_output(gpio, 0);
 	gpio_set_value(gpio, 1);
 
 	/* controller should be waken up, return irq.  */
 	gpio_direction_input(gpio);
-	gpio_free(gpio);
 
 	return 0;
 }
@@ -271,6 +261,7 @@ static int egalax_ts_probe(struct i2c_client *client,
 {
 	struct egalax_ts *ts;
 	struct input_dev *input_dev;
+	struct device_node *np = client->dev.node;
 	int error;
 
 	ts = devm_kzalloc(&client->dev, sizeof(struct egalax_ts), GFP_KERNEL);
@@ -292,8 +283,31 @@ static int egalax_ts_probe(struct i2c_client *client,
 	ts->client = client;
 	ts->input_dev = input_dev;
 
+	if (!np) {
+		dev_err(&client->dev,
+			"Cannot find device tree node\n");
+		error = VMM_ENODEV;
+		goto error_np;
+	}
+
+	ts->gpio = of_get_named_gpio(np, "wakeup-gpios", 0);
+	if (!gpio_is_valid(ts->gpio)) {
+		dev_err(&client->dev,
+			"Could not find the GPIO from the wakeup-gpios\n");
+		error = VMM_ENODEV;
+		goto error_gpio_dt;
+	}
+
+	error = gpio_request(ts->gpio, "egalax_irq");
+	if (error < 0) {
+		dev_err(&client->dev,
+			"request gpio failed, cannot wake up controller: %d\n",
+			error);
+		goto error_gpio_request;
+	}
+
 	/* controller may be in sleep, wake it up. */
-	error = egalax_wake_up_device(client);
+	error = egalax_wake_up_device(ts->gpio);
 	if (error) {
 		dev_err(&client->dev, "Failed to wake up the controller\n");
 		goto error_device;
@@ -372,6 +386,10 @@ error_thread_start:
 	vmm_threads_destroy(ts->thread);
 error_thread:
 error_device:
+	gpio_free(ts->gpio);
+error_gpio_request:
+error_gpio_dt:
+error_np:
 	input_free_device(ts->input_dev);
 error_input_alloc:
 	devm_kfree(&client->dev, ts);
