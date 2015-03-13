@@ -22,7 +22,6 @@
 
 #include <vmm_completion.h>
 
-#define DEV_DEBUG
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
@@ -35,7 +34,6 @@
 #include <linux/bitops.h>
 #include <linux/input/mt.h>
 #include <linux/of_gpio.h>
-#undef DEV_DEBUG
 
 /*
  * Mouse Mode: some panel may configure the controller to mouse mode,
@@ -145,6 +143,7 @@ static int egalax_ts_process(void *dev_id)
 		y = (buf[5] << 8) | buf[4];
 
 		dev_dbg(&client->dev, "%d %d\n", x, y);
+		vmm_printf("%d %d\n", x, y);
 		/* Currently, the panel Freescale using on SMD board _NOT_
 		 * support single pointer mode. All event are going to
 		 * multiple pointer mode.  Add single pointer mode according
