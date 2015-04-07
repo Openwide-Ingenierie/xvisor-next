@@ -716,7 +716,7 @@ static int mxcfb_set_smem(struct fb_info *fbi,
 			   unsigned long start, u32 len)
 {
 	int retval = 0;
-	u32 mem_len, alpha_mem_len;
+	u32 alpha_mem_len;
 	ipu_di_signal_cfg_t sig_cfg;
 	struct mxcfb_info *mxc_fbi = (struct mxcfb_info *)fbi->par;
 
