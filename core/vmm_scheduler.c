@@ -350,6 +350,8 @@ int vmm_scheduler_state_change(struct vmm_vcpu *vcpu, u32 new_state)
 			rc = vmm_schedalgo_vcpu_setup(vcpu);
 		} else if (current_state != VMM_VCPU_STATE_RESET) {
 			/* Existing VCPU */
+			/* Reset resume count */
+			vcpu->resume_count = 0;
 			/* Make sure VCPU is not in a ready queue */
 			if ((schedp->current_vcpu != vcpu) &&
 			    (current_state == VMM_VCPU_STATE_READY)) {
@@ -374,6 +376,15 @@ int vmm_scheduler_state_change(struct vmm_vcpu *vcpu, u32 new_state)
 		}
 		break;
 	case VMM_VCPU_STATE_READY:
+		if (current_state & VMM_VCPU_STATE_INTERRUPTIBLE) {
+			/* Increment resume count */
+			vcpu->resume_count++;
+			/* If resume count < 0 than skip with error */
+			if (vcpu->resume_count < 0) {
+				rc = VMM_EAGAIN;
+				goto skip_state_change;
+			}
+		}
 		if ((current_state == VMM_VCPU_STATE_READY) ||
 		    (current_state == VMM_VCPU_STATE_RUNNING)) {
 			goto skip_state_change;
@@ -396,6 +407,19 @@ int vmm_scheduler_state_change(struct vmm_vcpu *vcpu, u32 new_state)
 		rc = VMM_EINVALID;
 		break;
 	case VMM_VCPU_STATE_PAUSED:
+		if (current_state & VMM_VCPU_STATE_INTERRUPTIBLE) {
+			/* Decrement resume count */
+			vcpu->resume_count--;
+			/* If resume count > 0 then skip with error
+			 * If resume count == 0 then skip without error
+			 */
+			if (vcpu->resume_count > 0) {
+				rc = VMM_EAGAIN;
+				goto skip_state_change;
+			} else if (vcpu->resume_count == 0) {
+				goto skip_state_change;
+			}
+		}
 	case VMM_VCPU_STATE_HALTED:
 		if ((current_state == VMM_VCPU_STATE_READY) ||
 		    (current_state == VMM_VCPU_STATE_RUNNING)) {
