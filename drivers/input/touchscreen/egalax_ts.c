@@ -66,6 +66,10 @@
 #define EGALAX_MAX_Y	32760
 #define EGALAX_MAX_TRIES 100
 
+#define egalax_err(...)		vmm_lerror("eGalax: " __VA_ARGS__)
+#define egalax_notice(...)		vmm_lnotice("eGalax: " __VA_ARGS__)
+#define egalax_info(...)	vmm_linfo("eGalax: " __VA_ARGS__)
+
 struct egalax_pointer {
 	bool valid;
 	bool status;
@@ -107,6 +111,7 @@ static int egalax_ts_process(void *dev_id)
 	int id, ret, x, y;
 	bool down, valid;
 	u8 state;
+	int i = 0;
 
 	while (!process_stop) {
 		vmm_completion_wait(&data->completion);
@@ -115,6 +120,12 @@ static int egalax_ts_process(void *dev_id)
 		if (ret == -EAGAIN) {
 			goto retry;
 		}
+
+		egalax_notice("I2C frame:");
+		for (i = 0; i < MAX_I2C_DATA_LEN; i++) {
+			vmm_lnotice(" 0x%02x", buf[i]);
+		}
+		vmm_lnotice("\n");
 
 		if (ret < 0) {
 			vmm_host_irq_set_type(client->irq,
@@ -143,7 +154,7 @@ static int egalax_ts_process(void *dev_id)
 		y = (buf[5] << 8) | buf[4];
 
 		dev_dbg(&client->dev, "%d %d\n", x, y);
-		vmm_printf("%d %d\n", x, y);
+		egalax_notice("Pos: %d %d\n", x, y);
 		/* Currently, the panel Freescale using on SMD board _NOT_
 		 * support single pointer mode. All event are going to
 		 * multiple pointer mode.  Add single pointer mode according
@@ -272,9 +283,10 @@ static int egalax_ts_probe(struct i2c_client *client,
 	struct input_dev *input_dev;
 	int error;
 
+	egalax_info("Probing eGalax touchscreen\n");
 	ts = devm_kzalloc(&client->dev, sizeof(struct egalax_ts), GFP_KERNEL);
 	if (!ts) {
-		dev_err(&client->dev, "Failed to allocate memory\n");
+		egalax_err("Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
@@ -283,7 +295,7 @@ static int egalax_ts_probe(struct i2c_client *client,
 #endif /* 0 */
 	input_dev = input_allocate_device();
 	if (!input_dev) {
-		dev_err(&client->dev, "Failed to allocate memory\n");
+		egalax_err("Failed to allocate memory\n");
 		error = VMM_ENOMEM;
 		goto error_input_alloc;
 	}
@@ -294,13 +306,13 @@ static int egalax_ts_probe(struct i2c_client *client,
 	/* controller may be in sleep, wake it up. */
 	error = egalax_wake_up_device(client);
 	if (error) {
-		dev_err(&client->dev, "Failed to wake up the controller\n");
+		egalax_err("Failed to wake up the controller\n");
 		goto error_device;
 	}
 
 	error = egalax_firmware_version(client);
 	if (error < 0) {
-		dev_err(&client->dev, "Failed to read firmware version\n");
+		egalax_err("Failed to read firmware version\n");
 		goto error_device;
 	}
 
@@ -343,7 +355,7 @@ static int egalax_ts_probe(struct i2c_client *client,
 
 	error = input_register_device(ts->input_dev);
 	if (error) {
-		dev_err(&client->dev, "Failed to register input device\n");
+		egalax_err("Failed to register input device\n");
 		goto error_register;
 	}
 
@@ -351,15 +363,17 @@ static int egalax_ts_probe(struct i2c_client *client,
 
 	error = vmm_host_irq_set_type(client->irq, VMM_IRQ_TYPE_LEVEL_LOW);
 	if (error < 0) {
-		dev_err(&client->dev, "Failed to set interrupt type\n");
+		egalax_err("Failed to set interrupt type\n");
 		goto error_irq;
 	}
 	error = vmm_host_irq_register(client->irq, input_dev->name,
 				      egalax_ts_interrupt, ts);
 	if (error < 0) {
-		dev_err(&client->dev, "Failed to register interrupt\n");
+		egalax_err("Failed to register interrupt\n");
 		goto error_irq;
 	}
+
+	egalax_info("eGalax touchscreen registered\n");
 
 	return 0;
 
