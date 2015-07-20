@@ -110,6 +110,8 @@ struct vmm_mbufpool_ctrl {
 };
 
 static struct vmm_mbufpool_ctrl mbpctrl;
+static void m_free_mempool(struct vmm_mbuf *m);
+static void m_free_heap(struct vmm_mbuf *m);
 
 static u32 epool_slab_buf_size(u32 slab)
 {
@@ -259,11 +261,15 @@ VMM_EXPORT_SYMBOL(m_copydata);
 struct vmm_mbuf *m_get(int nowait, int flags)
 {
 	struct vmm_mbuf *m;
-	
+
 	/* TODO: implement non-blocking variant */
 
 	m = mempool_zalloc(mbpctrl.mpool);
-	if (!m) {
+	if (m) {
+		m->m_freefn = m_free_mempool;
+	} else if (NULL != (m = vmm_malloc(sizeof (struct vmm_mbuf)))) {
+		m->m_freefn = m_free_heap;
+	} else {
 		return NULL;
 	}
 
@@ -328,10 +334,20 @@ void m_ext_free(struct vmm_mbuf *m)
 		}
 	}
 	if (!(--(m->m_ref))) {
-		mempool_free(mbpctrl.mpool, m);
+		m->m_freefn(m);
 	}
 }
 VMM_EXPORT_SYMBOL(m_ext_free);
+
+static void m_free_mempool(struct vmm_mbuf *m)
+{
+	mempool_free(mbpctrl.mpool, m);
+}
+
+static void m_free_heap(struct vmm_mbuf *m)
+{
+	vmm_free(m);
+}
 
 struct vmm_mbuf *m_free(struct vmm_mbuf *m)
 {
