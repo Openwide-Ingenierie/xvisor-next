@@ -159,6 +159,7 @@ struct vmm_mbuf {
 #define	M_EXT_ROMAP	0x04000000	/* ext mapping is r-o at MMU */
 #define	M_EXT_RW	0x08000000	/* ext storage is writable */
 #define	M_EXT_DONTFREE	0x10000000	/* extfree not required */
+#define	M_EXT_DMA	0x20000000	/* ext storage is DMA heap alloced */
 
 /* flags copied when copying m_pkthdr */
 #define	M_COPYFLAGS	(M_PKTHDR)

@@ -294,13 +294,23 @@ static void ext_pool_free(struct vmm_mbuf *m, void *ptr, u32 size, void *arg)
 	mempool_free(mp, ptr);
 }
 
+static void ext_dma_free(struct vmm_mbuf *m, void *ptr, u32 size, void *arg)
+{
+	vmm_dma_free(ptr);
+}
+
 void *m_ext_get(struct vmm_mbuf *m, u32 size, int how)
 {
 	void *buf;
 	u32 slab;
-	struct mempool *mp;
+	struct mempool *mp = NULL;
 
-	mp = NULL;
+	if (M_EXT_DMA == how) {
+		buf = vmm_dma_malloc(size);
+		MEXTADD(m, buf, size, ext_dma_free, NULL);
+		return m->m_extbuf;
+	}
+
 	for (slab = 0; slab < EPOOL_SLAB_COUNT; slab++) {
 		if (size <= epool_slab_buf_size(slab)) {
 			mp = mbpctrl.epool_slabs[slab];
