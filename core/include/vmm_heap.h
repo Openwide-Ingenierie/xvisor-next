@@ -76,6 +76,9 @@ void *vmm_dma_malloc(virtual_size_t size);
 /** Allocate DMA memory and zero set */
 void *vmm_dma_zalloc(virtual_size_t size);
 
+/** Check if an address is allocated on the DMA heap */
+int vmm_is_dma(void *va);
+
 /** Allocate DMA memory and get its physical address */
 void *vmm_dma_zalloc_phy(virtual_size_t size, physical_addr_t *paddr);
 

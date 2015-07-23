@@ -277,6 +277,7 @@ do {									\
 
 struct vmm_mbuf *m_free(struct vmm_mbuf *);
 struct vmm_mbuf *m_get(int, int);
+void ext_dma_free(struct vmm_mbuf *m, void *ptr, u32 size, void *arg);
 void *m_ext_get(struct vmm_mbuf *, u32, int);
 void m_copydata(struct vmm_mbuf *, int, int, void *);
 void m_freem(struct vmm_mbuf *);

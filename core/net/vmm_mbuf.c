@@ -294,7 +294,7 @@ static void ext_pool_free(struct vmm_mbuf *m, void *ptr, u32 size, void *arg)
 	mempool_free(mp, ptr);
 }
 
-static void ext_dma_free(struct vmm_mbuf *m, void *ptr, u32 size, void *arg)
+void ext_dma_free(struct vmm_mbuf *m, void *ptr, u32 size, void *arg)
 {
 	vmm_dma_free(ptr);
 }

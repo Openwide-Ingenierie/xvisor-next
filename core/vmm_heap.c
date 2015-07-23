@@ -117,7 +117,7 @@ static physical_addr_t heap_va2pa(struct vmm_heap_control *heap, virtual_addr_t 
 	BUG_ON((virtual_addr_t)(heap->heap_start + heap->heap_size) <= va);
 
 	return (physical_addr_t)(va - (virtual_addr_t)heap->heap_start) +
-							heap->heap_start_pa;
+		heap->heap_start_pa;
 }
 
 static int heap_print_state(struct vmm_heap_control *heap,
@@ -259,6 +259,12 @@ void *vmm_dma_zalloc(virtual_size_t size)
 	}
 
 	return ret;
+}
+
+int vmm_is_dma(void *va)
+{
+	return ((va > dma_heap.heap_start) &&
+		(va < (dma_heap.heap_start + dma_heap.heap_size)));
 }
 
 void *vmm_dma_zalloc_phy(virtual_size_t size,
