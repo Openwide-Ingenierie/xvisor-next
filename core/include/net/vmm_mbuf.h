@@ -288,6 +288,7 @@ void m_ext_free(struct vmm_mbuf *);
  */
 int vmm_mbufpool_init(void);
 void vmm_mbufpool_exit(void);
+void mbuf_dump(struct vmm_mbuf *mbuf);
 
 #endif /* __VMM_MBUF_H_ */
 
