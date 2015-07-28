@@ -728,7 +728,6 @@ static void do_tx_packet(struct lan9118_state *s)
 	int n;
 	u32 status;
 #ifdef DEBUG_LAN9118
-	int i;
 	char tname[30];
 	struct vmm_mbuf *mbuf = txp_mbuf(s);
 
