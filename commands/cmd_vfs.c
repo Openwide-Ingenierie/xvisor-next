@@ -53,7 +53,7 @@
 #define	MODULE_EXIT			cmd_vfs_exit
 
 #define VFS_MAX_FDT_SZ			(32*1024)
-#define VFS_LOAD_BUF_SZ			256
+#define VFS_LOAD_BUF_SZ			(4 * 1024)
 
 static void cmd_vfs_usage(struct vmm_chardev *cdev)
 {
@@ -416,7 +416,7 @@ static int cmd_vfs_run(struct vmm_chardev *cdev, const char *path)
 	int fd, rc;
 	u32 len;
 	size_t buf_rd;
-	char buf[VFS_LOAD_BUF_SZ];
+	char *buf = NULL;
 	u32 tok_len;
 	char *token, *save;
 	const char *delim = "\n";
@@ -425,6 +425,12 @@ static int cmd_vfs_run(struct vmm_chardev *cdev, const char *path)
 	rc = cmd_vfs_stat(cdev, path, &fd, &len);
 	if (VMM_OK != rc) {
 		return rc;
+	}
+
+	if (NULL == (buf = vmm_malloc(VFS_LOAD_BUF_SZ))) {
+		vmm_cprintf(cdev, "Failed to allocate buffer\n");
+		vfs_close(fd);
+		return VMM_ENOMEM;
 	}
 
 	while (len) {
@@ -456,6 +462,7 @@ static int cmd_vfs_run(struct vmm_chardev *cdev, const char *path)
 		}
 	}
 
+	vmm_free(buf);
 	rc = vfs_close(fd);
 	if (rc) {
 		vmm_cprintf(cdev, "Failed to close %s\n", path);
@@ -471,7 +478,7 @@ static int cmd_vfs_md5(struct vmm_chardev *cdev, const char *path)
 	int fd, rc, i;
 	u32 len;
 	size_t buf_rd;
-	u8 buf[VFS_LOAD_BUF_SZ];
+	u8 *buf = NULL;
 	struct md5_context md5c;
 	u8 digest[16];
 
@@ -480,6 +487,12 @@ static int cmd_vfs_md5(struct vmm_chardev *cdev, const char *path)
 		return rc;
 	}
 	md5_init(&md5c);
+
+	if (NULL == (buf = vmm_malloc(VFS_LOAD_BUF_SZ))) {
+		vmm_cprintf(cdev, "Failed to allocate buffer\n");
+		vfs_close(fd);
+		return VMM_ENOMEM;
+	}
 
 	while (len) {
 		buf_rd = cmd_vfs_read(fd, buf, len);
@@ -496,6 +509,7 @@ static int cmd_vfs_md5(struct vmm_chardev *cdev, const char *path)
 		vmm_cprintf(cdev, "%x", digest[i]);
 	vmm_cprintf(cdev, "\n");
 
+	vmm_free(buf);
 	rc = vfs_close(fd);
 	if (rc) {
 		vmm_cprintf(cdev, "Failed to close %s\n", path);
@@ -512,7 +526,7 @@ static int cmd_vfs_sha256(struct vmm_chardev *cdev, const char *path)
 	int fd, rc, i;
 	u32 len;
 	size_t buf_rd;
-	u8 buf[VFS_LOAD_BUF_SZ];
+	u8 *buf = NULL;
 	struct sha256_context sha256c;
 	sha256_digest_t digest;
 
@@ -521,6 +535,12 @@ static int cmd_vfs_sha256(struct vmm_chardev *cdev, const char *path)
 		return rc;
 	}
 	sha256_init(&sha256c);
+
+	if (NULL == (buf = vmm_malloc(VFS_LOAD_BUF_SZ))) {
+		vmm_cprintf(cdev, "Failed to allocate buffer\n");
+		vfs_close(fd);
+		return VMM_ENOMEM;
+	}
 
 	while (len) {
 		buf_rd = cmd_vfs_read(fd, buf, len);
@@ -537,6 +557,7 @@ static int cmd_vfs_sha256(struct vmm_chardev *cdev, const char *path)
 		vmm_cprintf(cdev, "%x", digest[i]);
 	vmm_cprintf(cdev, "\n");
 
+	vmm_free(buf);
 	rc = vfs_close(fd);
 	if (rc) {
 		vmm_cprintf(cdev, "Failed to close %s\n", path);
@@ -553,11 +574,17 @@ static int cmd_vfs_cat(struct vmm_chardev *cdev, const char *path)
 	u32 i, off, len;
 	bool found_non_printable;
 	size_t buf_rd;
-	char buf[VFS_LOAD_BUF_SZ];
+	char *buf = NULL;
 
 	rc = cmd_vfs_stat(cdev, path, &fd, &len);
 	if (VMM_OK != rc) {
 		return rc;
+	}
+
+	if (NULL == (buf = vmm_malloc(VFS_LOAD_BUF_SZ))) {
+		vmm_cprintf(cdev, "Failed to allocate buffer\n");
+		vfs_close(fd);
+		return VMM_ENOMEM;
 	}
 
 	off = 0;
@@ -585,6 +612,7 @@ static int cmd_vfs_cat(struct vmm_chardev *cdev, const char *path)
 		len -= buf_rd;
 	}
 
+	vmm_free(buf);
 	rc = vfs_close(fd);
 	if (rc) {
 		vmm_cprintf(cdev, "Failed to close %s\n", path);
@@ -924,7 +952,7 @@ static int cmd_vfs_load(struct vmm_chardev *cdev,
 	loff_t rd_off;
 	physical_addr_t wr_pa;
 	size_t buf_wr, buf_rd, buf_count, wr_count;
-	char buf[VFS_LOAD_BUF_SZ];
+	char *buf = NULL;
 
 	rc = cmd_vfs_stat(cdev, path, &fd, &len);
 	if (VMM_OK != rc) {
@@ -935,6 +963,12 @@ static int cmd_vfs_load(struct vmm_chardev *cdev,
 		vfs_close(fd);
 		vmm_cprintf(cdev, "Offset greater than file size\n");
 		return VMM_EINVALID;
+	}
+
+	if (NULL == (buf = vmm_malloc(VFS_LOAD_BUF_SZ))) {
+		vmm_cprintf(cdev, "Failed to allocate buffer\n");
+		vfs_close(fd);
+		return VMM_ENOMEM;
 	}
 
 	len = ((len - off) < len) ? (len - off) : len;
@@ -975,6 +1009,7 @@ static int cmd_vfs_load(struct vmm_chardev *cdev,
 			  (guest) ? (guest->name) : "host",
 			  (u64)pa, wr_count);
 
+	vmm_free(buf);
 	rc = vfs_close(fd);
 	if (rc) {
 		vmm_cprintf(cdev, "Failed to close %s\n", path);
