@@ -166,7 +166,8 @@ static int __init scu_cpu_init(struct vmm_devtree_node *node,
 	if (rc) {
 		clear_addr[cpu] = 0x0;
 	} else {
-		clear_addr[cpu] = vmm_host_iomap(pa, VMM_PAGE_SIZE);
+		clear_addr[cpu] = vmm_host_memmap(pa, VMM_PAGE_SIZE,
+						  VMM_MEMORY_FLAGS_NORMAL);
 	}
 
 	/* Map release address */
@@ -175,7 +176,8 @@ static int __init scu_cpu_init(struct vmm_devtree_node *node,
 	if (rc) {
 		release_addr[cpu] = 0x0;
 	} else {
-		release_addr[cpu] = vmm_host_iomap(pa, VMM_PAGE_SIZE);
+		release_addr[cpu] = vmm_host_memmap(pa, VMM_PAGE_SIZE,
+						    VMM_MEMORY_FLAGS_NORMAL);
 	}
 
 	/* Check core count from SCU */
