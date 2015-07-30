@@ -1265,7 +1265,14 @@ static void __mmc_detect_card_change(struct mmc_host *host)
 		}
 	} else {
 		if ((rc == VMM_ENOTSUPP) || (rc > 0)) {
-			__mmc_detect_card_inserted(host);
+			int tries = 0;
+
+			while (++tries < 3) {
+				rc = __mmc_detect_card_inserted(host);
+				if (VMM_OK == rc) {
+					break;
+				}
+			}
 		}
 	}
 }
@@ -1643,6 +1650,7 @@ VMM_EXPORT_SYMBOL(mmc_alloc_host);
 
 int mmc_add_host(struct mmc_host *host)
 {
+	int rc = VMM_OK;
 	char name[32];
 
 	if (!host || host->io_thread) {
@@ -1657,7 +1665,7 @@ int mmc_add_host(struct mmc_host *host)
 
 	INIT_COMPLETION(&host->io_avail);
 	vmm_snprintf(name, 32, "mmc%d", mmc_host_count);
-	host->io_thread = vmm_threads_create(name, mmc_host_thread, host, 
+	host->io_thread = vmm_threads_create(name, mmc_host_thread, host,
 					     VMM_THREAD_DEF_PRIORITY,
 					     VMM_THREAD_DEF_TIME_SLICE);
 	if (!host->io_thread) {
@@ -1666,18 +1674,25 @@ int mmc_add_host(struct mmc_host *host)
 	}
 
 	host->host_num = mmc_host_count;
-	mmc_host_count++;
-	list_add_tail(&host->link, &mmc_host_list);
 
 	vmm_mutex_unlock(&mmc_host_list_mutex);
 
-	/* Make an attempt to detect mmc card 
+	/* Make an attempt to detect mmc card
 	 * Note: If it fails then it means there is not card connected so
 	 * we ignore failures.
 	 */
 	vmm_mutex_lock(&host->lock);
-	__mmc_detect_card_inserted(host);
+	rc = __mmc_detect_card_inserted(host);
 	vmm_mutex_unlock(&host->lock);
+
+	if (VMM_OK != rc) {
+		vmm_threads_destroy(host->io_thread);
+		host->io_thread = NULL;
+		return rc;
+	}
+
+	mmc_host_count++;
+	list_add_tail(&host->link, &mmc_host_list);
 
 	return vmm_threads_start(host->io_thread);
 }
