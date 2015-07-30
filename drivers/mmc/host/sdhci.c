@@ -780,6 +780,7 @@ VMM_EXPORT_SYMBOL(sdhci_alloc_host);
 int sdhci_add_host(struct sdhci_host *host)
 {
 	int rc;
+	int tries = 0;
 	const char *ver;
 	physical_addr_t iopaddr;
 	struct mmc_host *mmc = host->mmc;
@@ -895,7 +896,16 @@ int sdhci_add_host(struct sdhci_host *host)
 		host->quirks |= SDHCI_QUIRK_BROKEN_CARD_DETECTION;
 	}
 
-	rc = mmc_add_host(mmc);
+	while (++tries < 3) {
+		rc = mmc_add_host(mmc);
+		if (VMM_OK == rc) {
+			break;
+		}
+		vmm_lwarning("Failed to add the MMC host %d time(s)\n",
+			     tries);
+		sdhci_reset(host, SDHCI_RESET_ALL);
+	}
+
 	if (rc) {
 		goto free_host_irq;
 	}
