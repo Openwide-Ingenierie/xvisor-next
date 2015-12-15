@@ -44,10 +44,6 @@
 			"vfs guest_load_list guest1 /images/arm32/sabrelite-a9/nor_flash.list",
 
 			/* Umount the SD/MMC card */
-			"vfs umount /",
-
-			/* Kick the guests */
-			"guest kick guest0",
-			"guest kick guest1";
+			"vfs umount /";
 	};
 };
