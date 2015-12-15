@@ -18,11 +18,11 @@
 			start_pc = <0x81000000>;
 		};
 
-		vcpu1 {
-			device_type = "vcpu";
-			compatible = "armv7a,cortex-a9";
-			start_pc = <0x81000000>;
-		};
+		/* vcpu1 { */
+		/* 	device_type = "vcpu"; */
+		/* 	compatible = "armv7a,cortex-a9"; */
+		/* 	start_pc = <0x81000000>; */
+		/* }; */
 	};
 
 	aspace {
